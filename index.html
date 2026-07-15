@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="referrer" content="no-referrer" />
+  <meta name="theme-color" content="#09090b" />
+  <title>栖影</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%233b82f6'/%3E%3Cpath d='M16 18h32v10H16zm4 14h24v18H20z' fill='none' stroke='white' stroke-width='5' stroke-linejoin='round'/%3E%3Cpath d='M27 39h10' stroke='white' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./styles.css?v=20260715-7" />
+  <script src="./vendor/hls.min.js" defer></script>
+  <script src="./vendor/anime.iife.min.js?v=4.0.2" defer></script>
+  <script>
+    window.addEventListener("error", function (e) {
+      if (e && e.target && e.target.src && e.target.src.indexOf("hls.min.js") !== -1 && !window.Hls) {
+        var s = document.createElement("script");
+        s.src = "https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js";
+        s.defer = true;
+        document.head.appendChild(s);
+      }
+      if (e && e.target && e.target.src && e.target.src.indexOf("anime.iife.min.js") !== -1 && !window.anime) {
+        var a = document.createElement("script");
+        a.src = "https://cdn.jsdelivr.net/npm/animejs@4.0.2/lib/anime.iife.min.js";
+        a.defer = true;
+        a.addEventListener("load", function () {
+          document.documentElement.classList.add("motion-enabled");
+        });
+        document.head.appendChild(a);
+      }
+    }, true);
+  </script>
+</head>
+<body>
+  <!-- Lucide icon sprite: one visual language, zero runtime dependency. -->
+  <svg class="icon-sprite" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-archive" viewBox="0 0 24 24">
+        <rect width="20" height="5" x="2" y="3" rx="1" />
+        <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+        <path d="M10 12h4" />
+      </symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24">
+        <rect width="7" height="7" x="3" y="3" rx="1" />
+        <rect width="7" height="7" x="14" y="3" rx="1" />
+        <rect width="7" height="7" x="3" y="14" rx="1" />
+        <rect width="7" height="7" x="14" y="14" rx="1" />
+      </symbol>
+      <symbol id="i-image" viewBox="0 0 24 24">
+        <rect width="18" height="18" x="3" y="3" rx="2" />
+        <circle cx="9" cy="9" r="2" />
+        <path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" />
+      </symbol>
+      <symbol id="i-image-off" viewBox="0 0 24 24">
+        <path d="m2 2 20 20" />
+        <path d="M10.4 6H19a2 2 0 0 1 2 2v8.6" />
+        <path d="M3 15.7V8a2 2 0 0 1 2-2" />
+        <path d="m3 16 4-4a2 2 0 0 1 2.8 0l5.2 5.2" />
+        <path d="M14 14.3 15.2 13a2 2 0 0 1 2.8 0l3 3" />
+        <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+      </symbol>
+      <symbol id="i-video" viewBox="0 0 24 24">
+        <rect width="14" height="12" x="2" y="6" rx="2" />
+        <path d="m16 11 5.2-3.5a.5.5 0 0 1 .8.4v8.2a.5.5 0 0 1-.8.4L16 13" />
+      </symbol>
+      <symbol id="i-search" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.3-4.3" />
+      </symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24">
+        <path d="M4 21v-7" />
+        <path d="M4 10V3" />
+        <path d="M12 21v-9" />
+        <path d="M12 8V3" />
+        <path d="M20 21v-5" />
+        <path d="M20 12V3" />
+        <path d="M1 14h6" />
+        <path d="M9 8h6" />
+        <path d="M17 16h6" />
+      </symbol>
+      <symbol id="i-x" viewBox="0 0 24 24">
+        <path d="M18 6 6 18" />
+        <path d="m6 6 12 12" />
+      </symbol>
+      <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol>
+      <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></symbol>
+      <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14" /><path d="m19 12-7 7-7-7" /></symbol>
+      <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6" /></symbol>
+      <symbol id="i-external-link" viewBox="0 0 24 24">
+        <path d="M15 3h6v6" />
+        <path d="M10 14 21 3" />
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      </symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="m5 3 14 9-14 9V3Z" /></symbol>
+      <symbol id="i-volume-x" viewBox="0 0 24 24">
+        <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+        <path d="m22 9-6 6" />
+        <path d="m16 9 6 6" />
+      </symbol>
+      <symbol id="i-volume-2" viewBox="0 0 24 24">
+        <path d="M11 5 6 9H2v6h4l5 4V5Z" />
+        <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+        <path d="M19 5a9 9 0 0 1 0 14" />
+      </symbol>
+      <symbol id="i-shuffle" viewBox="0 0 24 24">
+        <path d="m18 14 4 4-4 4" />
+        <path d="m18 2 4 4-4 4" />
+        <path d="M2 18h2.5a7 7 0 0 0 5.9-3.2l3.2-5.6A7 7 0 0 1 19.5 6H22" />
+        <path d="M2 6h2.5a7 7 0 0 1 5.2 2.3" />
+        <path d="M15.6 15.7a7 7 0 0 0 3.9 2.3H22" />
+      </symbol>
+      <symbol id="i-zoom-in" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.3-4.3" />
+        <path d="M11 8v6" />
+        <path d="M8 11h6" />
+      </symbol>
+    </defs>
+  </svg>
+
+  <div id="app">
+    <header class="chrome" id="chrome">
+      <div class="chrome-row">
+        <a class="logo" href="#/" aria-label="首页">
+          <span class="logo-mark" aria-hidden="true">
+            <svg class="icon"><use href="#i-archive"></use></svg>
+          </span>
+          <span class="logo-copy">
+            <span class="logo-text">栖影</span>
+            <span class="logo-kicker">MEDIA VAULT</span>
+          </span>
+        </a>
+
+        <nav class="main-tabs" id="mainTabs" aria-label="主分区">
+          <button type="button" class="main-tab active" data-tab="posts" aria-current="page">
+            <svg class="icon" aria-hidden="true"><use href="#i-grid"></use></svg>
+            <span>帖子</span><span class="n" id="tabCountPosts"></span>
+          </button>
+          <button type="button" class="main-tab" data-tab="other-image">
+            <svg class="icon" aria-hidden="true"><use href="#i-image"></use></svg>
+            <span>全部图片</span><span class="n" id="tabCountImages"></span>
+          </button>
+          <button type="button" class="main-tab" data-tab="other-video">
+            <svg class="icon" aria-hidden="true"><use href="#i-video"></use></svg>
+            <span>其他视频</span><span class="n" id="tabCountVideos"></span>
+          </button>
+        </nav>
+
+        <form class="search" id="searchForm" role="search" autocomplete="off">
+          <svg class="icon search-ico" aria-hidden="true"><use href="#i-search"></use></svg>
+          <input id="searchInput" type="search" placeholder="搜索标题、标签、作者或 pid" enterkeyhint="search" aria-label="搜索，按斜杠快速聚焦" spellcheck="false" />
+          <kbd class="search-key" aria-hidden="true">/</kbd>
+          <button type="button" class="search-x" id="searchClear" hidden aria-label="清除搜索" title="清除搜索">
+            <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+          </button>
+        </form>
+
+        <button type="button" class="filter-toggle" id="filterToggle" aria-controls="filters" aria-expanded="false" title="展开筛选">
+          <svg class="icon" aria-hidden="true"><use href="#i-sliders"></use></svg>
+          <span class="filter-toggle-label">筛选</span>
+          <span class="filter-count" id="filterCount" hidden></span>
+        </button>
+      </div>
+
+      <div class="filters is-collapsed" id="filters">
+        <div class="filters-head">
+          <div>
+            <span class="filters-eyebrow">FILTERS</span>
+            <strong>缩小浏览范围</strong>
+          </div>
+          <button type="button" class="filter-reset" id="filterReset" hidden>清除筛选</button>
+        </div>
+        <div class="filter-block">
+          <span class="filter-label">类型</span>
+          <div class="seg" id="kindSeg" aria-label="媒体类型">
+            <button type="button" class="seg-btn active" data-kind="all" aria-pressed="true">全部</button>
+            <button type="button" class="seg-btn" data-kind="image" aria-pressed="false">仅图片</button>
+            <button type="button" class="seg-btn" data-kind="video" aria-pressed="false">仅视频</button>
+            <button type="button" class="seg-btn" data-kind="mixed" aria-pressed="false">图+视频</button>
+          </div>
+        </div>
+        <div class="filter-block grow">
+          <span class="filter-label">分类</span>
+          <div class="chips" id="catChips"></div>
+        </div>
+        <div class="filter-block grow">
+          <span class="filter-label">标签</span>
+          <div class="chips" id="tagChips"></div>
+        </div>
+      </div>
+
+      <div class="stats-bar" id="statsBar" role="status" aria-live="polite" aria-atomic="true">
+        <span class="stats-dot" aria-hidden="true"></span>
+        <span id="statsText">加载中…</span>
+      </div>
+    </header>
+
+    <main id="main" class="main"></main>
+  </div>
+
+  <div class="lightbox" id="lightbox" hidden>
+    <div class="lightbox-backdrop" id="lightboxBackdrop"></div>
+    <div class="lightbox-panel" role="dialog" aria-modal="true" aria-labelledby="lbTitle">
+      <header class="lightbox-head">
+        <div class="lightbox-head-text">
+          <h2 id="lbTitle">预览</h2>
+          <p id="lbSub" class="lightbox-sub"></p>
+        </div>
+        <div class="lightbox-head-actions">
+          <button type="button" class="icon-btn" id="lbPrev" aria-label="上一项" title="上一项">
+            <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"></use></svg>
+          </button>
+          <button type="button" class="icon-btn" id="lbNext" aria-label="下一项" title="下一项">
+            <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"></use></svg>
+          </button>
+          <button type="button" class="icon-btn" id="lbClose" aria-label="关闭预览" title="关闭预览">
+            <svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg>
+          </button>
+        </div>
+      </header>
+      <div class="lightbox-body" id="lbBody"></div>
+      <footer class="lightbox-foot" id="lbFoot"></footer>
+    </div>
+  </div>
+
+  <button type="button" class="fab-top" id="backTop" hidden aria-label="回到顶部" title="回到顶部">
+    <svg class="icon" aria-hidden="true"><use href="#i-arrow-up"></use></svg>
+  </button>
+
+  <script src="./app.js?v=20260715-8" type="module"></script>
+</body>
+</html>

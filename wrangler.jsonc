@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "qiying-media-vault",
+  "main": "cloudflare/worker.js",
+  "compatibility_date": "2026-07-15",
+  "account_id": "554dc22ce087daca37a227a09e4426a5",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+  "workers_dev": true,
+  "preview_urls": true
+}
