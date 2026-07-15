@@ -4,9 +4,9 @@
 
 ## 当前采用的实验方案
 
-当前按项目维护者要求，允许将自定义域名通过 DNSPod 分线路 CNAME 到 `qiying-media-vault.cfmxy123.workers.dev` 和经过验证的 Cloudflare 优选目标。该方式不属于 Cloudflare 官方支持路径，DNS CNAME 也不会改变浏览器发送的 TLS SNI 和 HTTP Host，因此依赖已存在的自定义域名路由与证书继续生效。
+当前按项目维护者要求，允许将自定义域名通过 DNSPod 分线路 CNAME 到 `qiying-media-vault.cfmxy123.workers.dev` 和经过验证的 Cloudflare 优选目标。该方式不属于 Cloudflare 官方支持路径，DNS CNAME 也不会改变浏览器发送的 TLS SNI 和 HTTP Host，因此依赖预先签发的证书和显式 Worker Route 继续生效。
 
-上线前必须保留 Cloudflare Worker 中对应 hostname 的 Domains & Routes 绑定，只删除 Cloudflare DNS 中与 NS 委派冲突的 DNS 记录。不要删除 Worker 的域名绑定或对应证书。
+上线前必须先通过 Worker Custom Domain 为 hostname 签发证书。证书 Active 后删除 Custom Domain 绑定，但不要手工删除对应的 Advanced Certificate；随后使用 Worker Route 将 `media.example.com/*` 路由到 `qiying-media-vault`。
 
 Cloudflare 官方支持的方案如下：
 
@@ -17,11 +17,11 @@ Cloudflare 官方支持的方案如下：
 | Business / Enterprise | DNSPod | 使用 Cloudflare Partial CNAME Setup，目标指向 Cloudflare 分配的 `.cdn.cloudflare.net` hostname |
 | Enterprise | Cloudflare 子域 Zone | 将专用子域委派给 Cloudflare，在子域 Zone 内配置 Custom Domain |
 
-> DNSPod 的 NS 委派与同一节点的 CNAME 不能同时作为标准 DNS 数据存在。将子域委派给 Cloudflare 后，该子域也不再由 DNSPod 执行境内/境外分线路解析。
+> DNSPod 的 NS 委派与 Cloudflare 自动创建的 Worker Custom Domain DNS 记录不能共存，因此必须先签发证书，再删除 Custom Domain 绑定并改用 Worker Route。
 
 ## 实验方案：DNSPod 分线路 CNAME 到 workers.dev
 
-假设业务域名为 `media.example.com`，Worker 默认域名为 `qiying-media-vault.cfmxy123.workers.dev`。
+当前业务域名为 `media.example.com`，Worker 默认域名为 `qiying-media-vault.cfmxy123.workers.dev`。
 
 ### 1. 预先建立 Worker 域名绑定
 
@@ -34,11 +34,37 @@ python3 scripts/build_site.py
 npx wrangler deploy --domain media.example.com
 ```
 
-后续操作中保留 Domains & Routes 绑定。只处理 DNS 记录。
+证书生效后，从 Worker 的 **Domains & Routes** 中删除该 Custom Domain。Cloudflare 不会自动删除已经签发的 Advanced Certificate。
 
-### 2. 将专用子域委派给 DNSPod
+### 2. 建立 Worker Route
 
-1. 在 DNSPod 添加 `media.example.com`，按 DNSPod 提示添加 TXT 记录完成所有权验证。
+Custom Domain 删除后，为父 Zone 添加 Worker Route：
+
+```jsonc
+{
+  "routes": [
+    {
+      "pattern": "media.example.com/*",
+      "zone_name": "example.com"
+    }
+  ]
+}
+```
+
+也可以通过 Cloudflare API 创建：
+
+```json
+{
+  "pattern": "media.example.com/*",
+  "script": "qiying-media-vault"
+}
+```
+
+缺少这条 Route 时，默认 CNAME 会返回 Cloudflare `DNS points to prohibited IP` 错误。
+
+### 3. 将专用子域委派给 DNSPod
+
+1. 在 DNSPod 添加 `media.example.com`，按 DNSPod 提示在父 Zone `example.com` 添加 TXT 记录完成所有权验证。当前完整记录名为 `_dnspodcheck.example.com`，不是 `_dnspodcheck.media.example.com`。
 2. 记录 DNSPod 为该子域分配的 NS 地址。
 3. 在父域当前的权威 DNS 中，删除 `media.example.com` 上与委派冲突的 A、AAAA 或 CNAME 记录。
 4. 为 `media.example.com` 添加 DNSPod 提供的 NS 记录。
@@ -46,7 +72,7 @@ npx wrangler deploy --domain media.example.com
 
 建议使用专用子域，不要委派承载邮件、验证记录或其他服务的主域。
 
-### 3. 配置 DNSPod 分线路记录
+### 4. 配置 DNSPod 分线路记录
 
 先添加默认线路：
 
@@ -58,11 +84,11 @@ npx wrangler deploy --domain media.example.com
 
 | 主机记录 | 记录类型 | 线路 | 目标 |
 |----------|----------|------|------|
-| `@` | CNAME | 境内 | 经过实测的 Cloudflare 优选域名 |
+| `@` | CNAME | 境内 | `qiying.cloudflare.182682.xyz` |
 
-第三方优选目标不要直接写入代码仓库。每次更换目标后重新验证证书、首页和媒体代理。
+当前目标来自微测网 `*.cloudflare.182682.xyz` 通配符服务。每次更换目标后重新验证证书、首页和媒体代理。
 
-### 4. 验证
+### 5. 验证
 
 部署包含 `/api/health` 的最新 Worker 后执行：
 
@@ -88,7 +114,7 @@ scripts/verify_worker_domain.sh media.example.com
 }
 ```
 
-### 5. 回退
+### 6. 回退
 
 如果境内线路失败：
 
@@ -98,9 +124,10 @@ scripts/verify_worker_domain.sh media.example.com
 如果默认线路也失败：
 
 1. 删除父域中的 DNSPod NS 委派。
-2. 将该 hostname 恢复为 Cloudflare 权威 DNS。
-3. 重新执行 `npx wrangler deploy --domain media.example.com`。
-4. 等待 Cloudflare DNS 与证书恢复后验证。
+2. 删除 `media.example.com/*` Worker Route。
+3. 将该 hostname 恢复为 Cloudflare 权威 DNS。
+4. 重新执行 `npx wrangler deploy --domain media.example.com`。
+5. 等待 Cloudflare DNS 与证书恢复后验证。
 
 回退期间始终可以使用 `https://qiying-media-vault.cfmxy123.workers.dev/`。
 

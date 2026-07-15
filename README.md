@@ -5,6 +5,7 @@
 ## 在线访问
 
 - Cloudflare Workers（完整功能）：[qiying-media-vault.cfmxy123.workers.dev](https://qiying-media-vault.cfmxy123.workers.dev/)
+- Cloudflare 自定义域名：[media.example.com](https://media.example.com/)
 - GitHub Pages（静态版本）：[hg3386628.github.io/qiying-media-vault](https://hg3386628.github.io/qiying-media-vault/)
 - 项目仓库：[github.com/hg3386628/qiying-media-vault](https://github.com/hg3386628/qiying-media-vault)
 
