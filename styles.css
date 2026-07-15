@@ -443,6 +443,30 @@ kbd {
   font-weight: 650;
 }
 
+.filters-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.filter-shuffle {
+  display: none;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-2);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.filter-shuffle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
 .filter-reset {
   min-height: 44px;
   padding: 0 var(--space-3);
@@ -1868,22 +1892,32 @@ kbd {
   }
 
   .chrome-row {
-    padding: var(--space-2) max(var(--space-3), var(--safe-right)) var(--space-2) max(var(--space-3), var(--safe-left));
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "logo filter"
-      "search search"
-      "tabs tabs";
-    gap: var(--space-2);
+    min-height: 56px;
+    padding: var(--space-1) max(var(--space-3), var(--safe-right)) var(--space-1) max(var(--space-3), var(--safe-left));
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "logo tabs filter";
+    gap: 6px;
   }
 
   .logo {
     min-width: 0;
+    min-height: 44px;
+    gap: var(--space-2);
   }
 
   .logo-mark {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-2);
+  }
+
+  .logo-mark .icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .logo-text {
+    font-size: 15px;
   }
 
   .logo-kicker,
@@ -1893,9 +1927,44 @@ kbd {
     display: none;
   }
 
+  .search {
+    display: none;
+  }
+
+  .main-tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .main-tab {
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 5px;
+    gap: 0;
+    border-radius: var(--radius-2);
+    font-size: 12.5px;
+  }
+
+  .main-tab .icon {
+    display: none;
+  }
+
+  .main-tab.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+
   .filter-toggle {
-    min-width: 48px;
-    width: 48px;
+    min-width: 44px;
+    width: 44px;
+    min-height: 44px;
+    height: 44px;
     padding: 0;
   }
 
@@ -1905,24 +1974,12 @@ kbd {
     right: -4px;
   }
 
-  .search {
-    height: 46px;
-  }
-
-  .main-tab {
-    min-width: 0;
-    padding: 0 var(--space-2);
-    gap: var(--space-1);
-    font-size: 13px;
-  }
-
-  .main-tab .icon {
-    width: 16px;
-    height: 16px;
-  }
-
   .filters {
     padding: var(--space-3) max(var(--space-3), var(--safe-right)) var(--space-4) max(var(--space-3), var(--safe-left));
+  }
+
+  .filter-shuffle:not([hidden]) {
+    display: inline-flex;
   }
 
   .filter-block {
@@ -1975,11 +2032,6 @@ kbd {
   }
 
   .shuffle-btn {
-    width: 44px;
-    padding: 0;
-  }
-
-  .shuffle-btn span {
     display: none;
   }
 

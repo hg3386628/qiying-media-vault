@@ -273,6 +273,7 @@ const kindSeg = $("kindSeg");
 const filtersEl = $("filters");
 const filterToggle = $("filterToggle");
 const filterReset = $("filterReset");
+const filterShuffle = $("filterShuffle");
 const filterCount = $("filterCount");
 const mainTabs = $("mainTabs");
 const backTop = $("backTop");
@@ -1645,6 +1646,7 @@ function syncFilterPanel(route) {
     filterCount.hidden = count === 0;
     filterCount.textContent = count ? String(count) : "";
   }
+  if (filterShuffle) filterShuffle.hidden = !postsList || !isShuffleView(route);
   if (filterReset) filterReset.hidden = count === 0;
   if (filtersEl) {
     filtersEl.classList.toggle("is-collapsed", !state.filterOpen);
@@ -1835,6 +1837,15 @@ function wireChromeActions() {
   filterReset?.addEventListener("click", () => {
     const route = parseHash();
     location.hash = navHash(route, { page: 1, kind: "all", cat: "", tag: "" });
+  });
+
+  filterShuffle?.addEventListener("click", () => {
+    const route = parseHash();
+    if (route.view !== "list" || activeTab(route) !== "posts" || !isShuffleView(route)) return;
+    reshuffleAll();
+    state.filterOpen = false;
+    syncFilterPanel(route);
+    renderList({ ...route, page: 1 });
   });
 
   mainTabs?.addEventListener("keydown", (event) => {
