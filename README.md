@@ -165,23 +165,6 @@ python3 scrape_post_meta.py --workers 12
 
 成功后需重新 merge 进 `posts.json`（若你改过 merge 脚本再跑一遍；当前仓库内 posts 已含 merge 字段）。
 
-## 图片缓存（移动硬盘）
-
-约 5 万张图默认缓到 **`/Volumes/app/cdn-data-cache/images/`**（`app` 盘）：
-
-```bash
-# 试跑 50 张
-python3 cache_images.py --limit 50 --workers 8
-
-# 全量（可 Ctrl+C，下次自动跳过已下好的）
-python3 cache_images.py --workers 12
-```
-
-- 目录布局：`cdn-data-cache/images/upload_01/upload/.../xxx.jpg`（保留 CDN path）
-- `server.py` 的 `/api/img` **优先读本地缓存**，未命中再回源 CDN
-- 换路径：`CDN_IMAGE_CACHE=/path/to/cache python3 server.py`
-- 预计体积：按 ~100–200KB/张粗算约 **5–15GB**；硬盘剩余约 179GB
-
 ## 说明
 
 1. JSON 已完整本地镜像；二进制媒体默认可走外部 CDN，缓存后优先本地。
