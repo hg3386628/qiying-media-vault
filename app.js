@@ -2411,7 +2411,7 @@ function setFeedSoundEnabled(enabled, { unlock = enabled, persist = true } = {})
 function showFeedControls(timeoutMs = FEED_CONTROLS_HIDE_MS) {
   if (!state.feed.root) return;
   state.feed.root.classList.remove("controls-hidden");
-  state.feed.root.querySelectorAll(".feed-meta, .feed-actions, .feed-empty-tip").forEach((node) => {
+  state.feed.root.querySelectorAll(".feed-meta, .feed-actions").forEach((node) => {
     node.hidden = false;
   });
   if (state.feed.controlsTimer) clearTimeout(state.feed.controlsTimer);
@@ -2421,7 +2421,7 @@ function showFeedControls(timeoutMs = FEED_CONTROLS_HIDE_MS) {
       state.feed.controlsTimer = 0;
       state.feed.root?.classList.add("controls-hidden");
       state.feed.root
-        ?.querySelectorAll(".feed-meta, .feed-actions, .feed-empty-tip")
+        ?.querySelectorAll(".feed-meta, .feed-actions")
         .forEach((node) => {
           node.hidden = true;
         });
@@ -2736,7 +2736,6 @@ function renderOtherVideosFeed(route, token) {
     <div class="feed-shell" id="feedShell">
       <h1 class="sr-only">其他视频</h1>
       <div class="feed-scroller" id="feedScroller"></div>
-      <div class="feed-empty-tip" id="feedTip">上下滑动切换，点按开启声音</div>
     </div>
   `;
 
@@ -2849,7 +2848,6 @@ async function renderDetail(route) {
     state.browse = { items, index: -1, pid: post.pid };
 
     const when = formatDate(post.date_published || post.created);
-    const src = post.source_url || `https://www.91cg1.com/archives/${post.pid}/`;
 
     statsText.textContent = `pid ${post.pid} · ${post.image_count || 0} 图 · ${post.video_count || 0} 视频`;
 
@@ -2882,9 +2880,6 @@ async function renderDetail(route) {
               ${post.author ? `<span>${escapeHtml(post.author)}</span>` : ""}
               ${when ? `<span>${escapeHtml(when)}</span>` : ""}
               <span>PID ${post.pid}</span>
-              <a class="detail-source" href="${escapeHtml(
-                src
-              )}" target="_blank" rel="noreferrer">${icon("external-link")}<span>打开源站</span></a>
             </div>
             <div class="detail-counts" aria-label="媒体数量">
               <span>${icon("image")}<strong>${post.image_count || 0}</strong> 图片</span>
@@ -3098,13 +3093,6 @@ function openLightbox(index) {
     lbFoot.innerHTML = `
       <div class="lightbox-meta-line">${pidHint}<code>${escapeHtml(it.path || "")}</code></div>
       <div class="lightbox-foot-row">
-        ${
-          cands[0]
-            ? `<a class="lightbox-open" href="${escapeHtml(
-                cands[0]
-              )}" target="_blank" rel="noreferrer">${icon("external-link")}<span>打开原图</span></a>`
-            : ""
-        }
         <span class="lightbox-shortcuts"><kbd>←</kbd><kbd>→</kbd> 切换 · <kbd>Esc</kbd> 关闭</span>
       </div>
     `;
