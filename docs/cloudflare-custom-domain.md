@@ -21,7 +21,7 @@ Cloudflare 官方支持的方案如下：
 
 ## 实验方案：DNSPod 分线路 CNAME 到 workers.dev
 
-当前业务域名为 `media.example.com`，Worker 默认域名为 `qiying-media-vault.cfmxy123.workers.dev`。
+以下统一使用 `media.example.com` 作为业务域名占位符，Worker 默认域名为 `qiying-media-vault.cfmxy123.workers.dev`。真实生产域名只保存在 Cloudflare、DNSPod 和本地私有配置中，不写入公开仓库。
 
 ### 1. 预先建立 Worker 域名绑定
 
@@ -64,7 +64,7 @@ Custom Domain 删除后，为父 Zone 添加 Worker Route：
 
 ### 3. 将专用子域委派给 DNSPod
 
-1. 在 DNSPod 添加 `media.example.com`，按 DNSPod 提示在父 Zone `example.com` 添加 TXT 记录完成所有权验证。当前完整记录名为 `_dnspodcheck.example.com`，不是 `_dnspodcheck.media.example.com`。
+1. 在 DNSPod 添加 `media.example.com`，按 DNSPod 提示在父 Zone `example.com` 添加 TXT 记录完成所有权验证。实际 TXT 名称以 DNSPod 控制台提示为准。
 2. 记录 DNSPod 为该子域分配的 NS 地址。
 3. 在父域当前的权威 DNS 中，删除 `media.example.com` 上与委派冲突的 A、AAAA 或 CNAME 记录。
 4. 为 `media.example.com` 添加 DNSPod 提供的 NS 记录。

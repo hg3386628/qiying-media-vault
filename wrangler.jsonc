@@ -8,12 +8,6 @@
     "directory": "./dist",
     "binding": "ASSETS"
   },
-  "routes": [
-    {
-      "pattern": "media.example.com/*",
-      "zone_name": "example.com"
-    }
-  ],
   // 保留 workers.dev，作为 DNSPod 实验性 CNAME 的默认目标和故障回退入口。
   // 操作步骤、验证与回退方式见 docs/cloudflare-custom-domain.md。
   "workers_dev": true,
