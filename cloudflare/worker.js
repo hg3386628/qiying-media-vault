@@ -45,6 +45,25 @@ function errorResponse(status, message) {
   });
 }
 
+function healthResponse(request) {
+  const url = new URL(request.url);
+  const body = request.method === "HEAD"
+    ? null
+    : JSON.stringify({
+        ok: true,
+        service: "qiying-media-vault",
+        host: url.host,
+        colo: request.cf?.colo || null,
+      });
+  return new Response(body, {
+    status: 200,
+    headers: corsHeaders({
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+    }),
+  });
+}
+
 function hostAllowed(rawUrl, allowedHosts) {
   let hostname;
   try {
@@ -323,7 +342,7 @@ async function handleHls(request, url) {
   });
 }
 
-export { fetchUpstream, hostAllowed, md5browser, rewritePlaylist, signVideoUrl };
+export { fetchUpstream, healthResponse, hostAllowed, md5browser, rewritePlaylist, signVideoUrl };
 
 export default {
   async fetch(request, env) {
@@ -331,6 +350,7 @@ export default {
     if (!['GET', 'HEAD'].includes(request.method)) return errorResponse(405, "method not allowed");
     const url = new URL(request.url);
     try {
+      if (url.pathname === "/api/health") return healthResponse(request);
       if (url.pathname === "/api/img") return await handleImage(request, url);
       if (url.pathname === "/api/proxy") return await handleProxy(request, url);
       if (url.pathname === "/api/hls") return await handleHls(request, url);

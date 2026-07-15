@@ -3,11 +3,31 @@ import test from "node:test";
 
 import {
   fetchUpstream,
+  healthResponse,
   hostAllowed,
   md5browser,
   rewritePlaylist,
   signVideoUrl,
 } from "../cloudflare/worker.js";
+
+
+test("health endpoint reports the requested hostname for custom-domain verification", async () => {
+  const response = healthResponse(new Request("https://media.example.com/api/health"));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    service: "qiying-media-vault",
+    host: "media.example.com",
+    colo: null,
+  });
+
+  const head = healthResponse(
+    new Request("https://media.example.com/api/health", { method: "HEAD" })
+  );
+  assert.equal(head.status, 200);
+  assert.equal(await head.text(), "");
+});
 
 
 test("MD5 signing matches the browser implementation", () => {
