@@ -289,6 +289,14 @@ const lbNext = $("lbNext");
 const lbClose = $("lbClose");
 const lightboxBackdrop = $("lightboxBackdrop");
 
+const LIGHTBOX_SWIPE_MIN = 48;
+const lightboxSwipe = {
+  active: false,
+  pointerId: null,
+  startX: 0,
+  startY: 0,
+};
+
 const APP_BASE_URL = new URL(".", document.baseURI);
 const MEDIA_DATA_V2_URL = new URL("media-data/v2/", APP_BASE_URL);
 const LEGACY_POSTS_URL = new URL("media-data/posts.json", APP_BASE_URL);
@@ -2977,6 +2985,7 @@ async function renderDetail(route) {
 /* ---------------- lightbox ---------------- */
 
 function closeLightbox() {
+  resetLightboxSwipe();
   if (state.hls) {
     try {
       state.hls.destroy();
@@ -3108,6 +3117,35 @@ function openLightbox(index) {
   else animateLightboxOpen();
 }
 
+function resetLightboxSwipe() {
+  lightboxSwipe.active = false;
+  lightboxSwipe.pointerId = null;
+  lightboxSwipe.startX = 0;
+  lightboxSwipe.startY = 0;
+}
+
+function handleLightboxPointerDown(event) {
+  if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+  const item = state.browse.items?.[state.browse.index];
+  if (!item || item.kind !== "image") return;
+  lightboxSwipe.active = true;
+  lightboxSwipe.pointerId = event.pointerId;
+  lightboxSwipe.startX = event.clientX;
+  lightboxSwipe.startY = event.clientY;
+  try {
+    event.currentTarget.setPointerCapture(event.pointerId);
+  } catch {}
+}
+
+function handleLightboxPointerUp(event) {
+  if (!lightboxSwipe.active || event.pointerId !== lightboxSwipe.pointerId) return;
+  const dx = event.clientX - lightboxSwipe.startX;
+  const dy = event.clientY - lightboxSwipe.startY;
+  resetLightboxSwipe();
+  if (Math.abs(dx) < LIGHTBOX_SWIPE_MIN || Math.abs(dx) <= Math.abs(dy) * 1.2) return;
+  openLightbox(state.browse.index + (dx < 0 ? 1 : -1));
+}
+
 /* ---------------- search / chrome events ---------------- */
 
 function toggleSearchClear() {
@@ -3151,6 +3189,9 @@ lbClose?.addEventListener("click", closeLightbox);
 lightboxBackdrop?.addEventListener("click", closeLightbox);
 lbPrev?.addEventListener("click", () => openLightbox(state.browse.index - 1));
 lbNext?.addEventListener("click", () => openLightbox(state.browse.index + 1));
+lbBody?.addEventListener("pointerdown", handleLightboxPointerDown, { passive: true });
+lbBody?.addEventListener("pointerup", handleLightboxPointerUp, { passive: true });
+lbBody?.addEventListener("pointercancel", resetLightboxSwipe, { passive: true });
 
 backTop?.addEventListener("click", () => {
   window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? "auto" : "smooth" });

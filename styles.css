@@ -1351,6 +1351,7 @@ kbd {
   display: grid;
   place-items: center;
   background: #050605;
+  touch-action: pan-y;
 }
 
 .lightbox-body img,

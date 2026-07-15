@@ -20,3 +20,13 @@ test("video feed removes only the top tip and keeps side controls", () => {
   assert.equal(appSource.includes('class="feed-action-lab">详情'), true);
   assert.equal(appSource.includes('data-act="next"'), true);
 });
+
+test("image lightbox supports horizontal touch swipes without hijacking vertical gestures", () => {
+  assert.equal(appSource.includes("LIGHTBOX_SWIPE_MIN = 48"), true);
+  assert.equal(appSource.includes('event.pointerType !== "touch"'), true);
+  assert.equal(appSource.includes("Math.abs(dx) <= Math.abs(dy) * 1.2"), true);
+  assert.equal(appSource.includes("openLightbox(state.browse.index + (dx < 0 ? 1 : -1))"), true);
+  assert.equal(appSource.includes('lbBody?.addEventListener("pointerdown"'), true);
+  assert.equal(appSource.includes('lbBody?.addEventListener("pointerup"'), true);
+  assert.equal(styleSource.includes("touch-action: pan-y"), true);
+});
