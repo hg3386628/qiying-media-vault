@@ -8,6 +8,7 @@ import {
   readFeedSoundEnabled,
   writeFeedSoundEnabled,
 } from "./feed-policy.js";
+import { resolveWaterfallWidth } from "./layout-policy.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -2032,7 +2033,16 @@ function buildOtherImageItems(route) {
 }
 
 function waterfallLayoutConfig() {
-  const width = Math.max(280, (main?.clientWidth || window.innerWidth) - 8);
+  const mainStyle = main ? getComputedStyle(main) : null;
+  const horizontalPadding =
+    (parseFloat(mainStyle?.paddingLeft || "0") || 0) +
+    (parseFloat(mainStyle?.paddingRight || "0") || 0);
+  const mainContentWidth = main ? main.clientWidth - horizontalPadding : 0;
+  const width = resolveWaterfallWidth({
+    gridWidth: $("waterfall")?.clientWidth,
+    mainWidth: mainContentWidth,
+    viewportWidth: document.documentElement.clientWidth - horizontalPadding,
+  });
   const base = width < 520 ? 160 : width < 960 ? 220 : 280;
   const scale = state.imageScale || DEFAULT_IMAGE_SIZE;
   const targetHeight = Math.round((base * scale) / 100);

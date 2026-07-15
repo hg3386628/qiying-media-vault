@@ -1887,6 +1887,10 @@ kbd {
 /* ---------- Breakpoint: mobile ---------- */
 
 @media (max-width: 640px) {
+  html {
+    scrollbar-gutter: stable;
+  }
+
   :root {
     --space-page: 12px;
   }
