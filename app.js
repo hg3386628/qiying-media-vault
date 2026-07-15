@@ -3,6 +3,12 @@
  * Data: compact gzip shards under ./media-data/v2, with legacy posts.json fallback.
  */
 
+import {
+  listFeedPlayerIndexes,
+  readFeedSoundEnabled,
+  writeFeedSoundEnabled,
+} from "./feed-policy.js";
+
 const $ = (id) => document.getElementById(id);
 
 function icon(name, className = "") {
@@ -363,12 +369,17 @@ const state = {
     root: null,
     scroller: null,
     onScroll: null,
+    onPointerActivity: null,
+    controlsTimer: 0,
+    soundEnabled: readFeedSoundEnabled(),
+    soundUnlocked: false,
   },
 };
 
 const WATERFALL_BATCH = 36;
 const FEED_BATCH = 8;
 const FEED_PRELOAD = 1; // active ±1
+const FEED_CONTROLS_HIDE_MS = 3200;
 
 /** Category heat rank — source-site editorial / 点击榜 proxies (no raw click field in export) */
 const CAT_HEAT = {
@@ -1379,6 +1390,15 @@ function teardownSpecialModes() {
     window.removeEventListener("keydown", state.feed._onKey);
     state.feed._onKey = null;
   }
+  if (state.feed.root && state.feed.onPointerActivity) {
+    state.feed.root.removeEventListener("pointermove", state.feed.onPointerActivity);
+    state.feed.root.removeEventListener("pointerdown", state.feed.onPointerActivity);
+    state.feed.onPointerActivity = null;
+  }
+  if (state.feed.controlsTimer) {
+    clearTimeout(state.feed.controlsTimer);
+    state.feed.controlsTimer = 0;
+  }
   state.feed.items = [];
   state.feed.cursor = 0;
   state.feed.active = -1;
@@ -1389,7 +1409,7 @@ function teardownSpecialModes() {
 }
 
 function destroyAllFeedPlayers() {
-  for (const [idx] of [...state.feed.players.keys()]) {
+  for (const idx of listFeedPlayerIndexes(state.feed.players)) {
     destroyFeedPlayer(idx);
   }
 }
@@ -2332,11 +2352,123 @@ function buildOtherVideoItems(route) {
   return items;
 }
 
+function feedSoundActive() {
+  return state.feed.soundEnabled && state.feed.soundUnlocked;
+}
+
+function feedSoundControlState() {
+  const active = feedSoundActive();
+  return active
+    ? { icon: "volume-2", label: "静音", pressed: "false", action: "关闭声音" }
+    : { icon: "volume-x", label: "声音", pressed: "true", action: "打开声音" };
+}
+
+function updateFeedSoundControls() {
+  const controlState = feedSoundControlState();
+  state.feed.scroller?.querySelectorAll('[data-act="mute"]').forEach((control) => {
+    const lab = control.querySelector(".feed-action-lab");
+    const ico = control.querySelector(".feed-action-ico");
+    if (lab) lab.textContent = controlState.label;
+    if (ico) ico.innerHTML = icon(controlState.icon);
+    control.setAttribute("aria-pressed", controlState.pressed);
+    control.setAttribute("aria-label", controlState.action);
+    control.title = controlState.action;
+  });
+}
+
+function setFeedSoundEnabled(enabled, { unlock = enabled, persist = true } = {}) {
+  state.feed.soundEnabled = Boolean(enabled);
+  if (unlock) state.feed.soundUnlocked = true;
+  if (persist) writeFeedSoundEnabled(state.feed.soundEnabled);
+  const muted = !feedSoundActive();
+  for (const player of state.feed.players.values()) {
+    player.video.muted = muted;
+  }
+  updateFeedSoundControls();
+}
+
+function showFeedControls(timeoutMs = FEED_CONTROLS_HIDE_MS) {
+  if (!state.feed.root) return;
+  state.feed.root.classList.remove("controls-hidden");
+  state.feed.root.querySelectorAll(".feed-meta, .feed-actions, .feed-empty-tip").forEach((node) => {
+    node.hidden = false;
+  });
+  if (state.feed.controlsTimer) clearTimeout(state.feed.controlsTimer);
+  state.feed.controlsTimer = 0;
+  if (timeoutMs > 0) {
+    state.feed.controlsTimer = window.setTimeout(() => {
+      state.feed.controlsTimer = 0;
+      state.feed.root?.classList.add("controls-hidden");
+      state.feed.root
+        ?.querySelectorAll(".feed-meta, .feed-actions, .feed-empty-tip")
+        .forEach((node) => {
+          node.hidden = true;
+        });
+    }, timeoutMs);
+  }
+}
+
+function markFeedPlaying(index) {
+  const slide = state.feed.scroller?.querySelector(`[data-feed-idx="${index}"]`);
+  if (!slide) return;
+  slide.classList.add("is-playing");
+  slide.classList.remove("needs-tap");
+  const hint = slide.querySelector(".feed-hint");
+  if (hint) hint.hidden = true;
+  const poster = slide.querySelector(".feed-poster");
+  if (poster) poster.style.opacity = "0";
+}
+
+function showFeedHint(index, text) {
+  const slide = state.feed.scroller?.querySelector(`[data-feed-idx="${index}"]`);
+  if (!slide) return;
+  slide.classList.add("needs-tap");
+  const hint = slide.querySelector(".feed-hint");
+  if (hint) {
+    hint.hidden = false;
+    hint.textContent = text;
+  }
+}
+
+async function playFeedPlayer(index) {
+  const player = state.feed.players.get(index) || ensureFeedPlayer(index);
+  if (!player || state.feed.active !== index) return false;
+  player.playRequested = true;
+  player.video.muted = !feedSoundActive();
+  if (!player.ready && player.video.readyState < 2) return false;
+  try {
+    await player.video.play();
+    if (state.feed.active !== index) {
+      player.video.pause();
+      return false;
+    }
+    markFeedPlaying(index);
+    return true;
+  } catch {
+    if (feedSoundActive()) {
+      state.feed.soundUnlocked = false;
+      player.video.muted = true;
+      updateFeedSoundControls();
+      try {
+        await player.video.play();
+        if (state.feed.active === index) {
+          markFeedPlaying(index);
+          showFeedHint(index, "点击开启声音");
+          return true;
+        }
+      } catch {}
+    }
+    if (state.feed.active === index) showFeedHint(index, "点击播放");
+    return false;
+  }
+}
+
 function feedSlideHtml(it, index) {
   const title = postTitle(it.post);
   const when = formatDate(it.post.created);
   const cands = thumbCandidates(it.cover, it.cover);
   const poster = cands[0] || "";
+  const soundControl = feedSoundControlState();
   return `
     <section class="feed-slide" data-feed-idx="${index}" data-pid="${it.pid}" tabindex="0" role="button" aria-label="${escapeHtml(
       `视频 ${index + 1}：${title}，点击播放或暂停`
@@ -2361,9 +2493,9 @@ function feedSlideHtml(it, index) {
         )}</div>
       </div>
       <aside class="feed-actions">
-        <button type="button" class="feed-action" data-act="mute" title="打开声音" aria-label="打开声音" aria-pressed="true">
-          <span class="feed-action-ico">${icon("volume-x")}</span>
-          <span class="feed-action-lab">声音</span>
+        <button type="button" class="feed-action" data-act="mute" title="${soundControl.action}" aria-label="${soundControl.action}" aria-pressed="${soundControl.pressed}">
+          <span class="feed-action-ico">${icon(soundControl.icon)}</span>
+          <span class="feed-action-lab">${soundControl.label}</span>
         </button>
         <a class="feed-action" href="${detailHash(it.pid)}" title="查看详情" aria-label="查看帖子详情">
           <span class="feed-action-ico">${icon("external-link")}</span>
@@ -2383,7 +2515,7 @@ function feedSlideHtml(it, index) {
     </section>`;
 }
 
-function ensureFeedPlayer(index, muted) {
+function ensureFeedPlayer(index) {
   if (state.feed.players.has(index)) return state.feed.players.get(index);
   const it = state.feed.items[index];
   const slide = state.feed.scroller?.querySelector(`[data-feed-idx="${index}"]`);
@@ -2401,22 +2533,22 @@ function ensureFeedPlayer(index, muted) {
   video.setAttribute("playsinline", "");
   video.setAttribute("webkit-playsinline", "");
   video.preload = "metadata";
-  video.muted = muted !== false;
+  video.muted = !feedSoundActive();
   video.loop = true;
   video.controls = false;
   // keep poster under video until playing
   stage.appendChild(video);
 
-  const playUrl = isHlsPath(it.path)
-    ? hlsPlayUrl(it.path)
-    : isProgressivePath(it.path)
-      ? progressivePlayUrl(it.path)
-      : signVideoClient(it.path);
   let hls = null;
   let hlsWrap = null;
+  let player = null;
   const onReady = () => {
+    if (player) player.ready = true;
     slide.classList.remove("is-loading");
     if (loader) loader.hidden = true;
+    if (state.feed.active === index && player?.playRequested) {
+      void playFeedPlayer(index);
+    }
   };
 
   if (it.path) {
@@ -2441,7 +2573,7 @@ function ensureFeedPlayer(index, muted) {
     slide.classList.add("needs-tap");
   }
 
-  const player = { video, hls, hlsWrap, index };
+  player = { video, hls, hlsWrap, index, ready: video.readyState >= 2, playRequested: false };
   state.feed.players.set(index, player);
   return player;
 }
@@ -2450,7 +2582,7 @@ function syncFeedPlayback(activeIndex) {
   state.feed.active = activeIndex;
   // ensure nearby
   for (let i = activeIndex - FEED_PRELOAD; i <= activeIndex + FEED_PRELOAD; i++) {
-    if (i >= 0 && i < state.feed.cursor) ensureFeedPlayer(i, true);
+    if (i >= 0 && i < state.feed.cursor) ensureFeedPlayer(i);
   }
   // destroy far
   for (const idx of [...state.feed.players.keys()]) {
@@ -2460,26 +2592,10 @@ function syncFeedPlayback(activeIndex) {
   for (const [idx, player] of state.feed.players.entries()) {
     const slide = state.feed.scroller?.querySelector(`[data-feed-idx="${idx}"]`);
     if (idx === activeIndex) {
-      player.video.muted = true; // autoplay policy
-      const p = player.video.play();
-      if (p && p.then) {
-        p.then(() => {
-          slide?.classList.add("is-playing");
-          slide?.classList.remove("needs-tap");
-          const hint = slide?.querySelector(".feed-hint");
-          if (hint) hint.hidden = true;
-          const poster = slide?.querySelector(".feed-poster");
-          if (poster) poster.style.opacity = "0";
-        }).catch(() => {
-          slide?.classList.add("needs-tap");
-          const hint = slide?.querySelector(".feed-hint");
-          if (hint) {
-            hint.hidden = false;
-            hint.textContent = "点击播放";
-          }
-        });
-      }
+      player.playRequested = true;
+      void playFeedPlayer(idx);
     } else {
+      player.playRequested = false;
       try {
         player.video.pause();
       } catch {}
@@ -2498,6 +2614,7 @@ function syncFeedPlayback(activeIndex) {
       "zh-CN"
     )} · pid ${it.pid} · 上滑切换`;
   }
+  showFeedControls();
 }
 
 function appendFeedSlides() {
@@ -2528,17 +2645,19 @@ function bindFeedSlide(index) {
 
   slide.addEventListener("click", (e) => {
     if (e.target.closest(".feed-actions a, .feed-actions button")) return;
-    const player = state.feed.players.get(index) || ensureFeedPlayer(index, true);
+    showFeedControls();
+    if (state.feed.active !== index) syncFeedPlayback(index);
+    const player = state.feed.players.get(index) || ensureFeedPlayer(index);
     if (!player) return;
+    if (!feedSoundActive()) {
+      setFeedSoundEnabled(true, { unlock: true });
+      void playFeedPlayer(index);
+      return;
+    }
     if (player.video.paused) {
-      player.video.play().catch(() => {});
-      slide.classList.add("is-playing");
-      slide.classList.remove("needs-tap");
-      const hint = slide.querySelector(".feed-hint");
-      if (hint) hint.hidden = true;
-      const poster = slide.querySelector(".feed-poster");
-      if (poster) poster.style.opacity = "0";
+      void playFeedPlayer(index);
     } else {
+      player.playRequested = false;
       player.video.pause();
       slide.classList.remove("is-playing");
       const hint = slide.querySelector(".feed-hint");
@@ -2558,23 +2677,18 @@ function bindFeedSlide(index) {
 
   slide.querySelector('[data-act="mute"]')?.addEventListener("click", (e) => {
     e.stopPropagation();
-    const player = state.feed.players.get(index) || ensureFeedPlayer(index, false);
+    showFeedControls();
+    if (state.feed.active !== index) syncFeedPlayback(index);
+    const player = state.feed.players.get(index) || ensureFeedPlayer(index);
     if (!player) return;
-    player.video.muted = !player.video.muted;
-    const control = slide.querySelector('[data-act="mute"]');
-    const lab = slide.querySelector('[data-act="mute"] .feed-action-lab');
-    const ico = slide.querySelector('[data-act="mute"] .feed-action-ico');
-    if (lab) lab.textContent = player.video.muted ? "声音" : "静音";
-    if (ico) ico.innerHTML = icon(player.video.muted ? "volume-x" : "volume-2");
-    if (control) {
-      control.setAttribute("aria-pressed", player.video.muted ? "true" : "false");
-      control.setAttribute("aria-label", player.video.muted ? "打开声音" : "静音");
-      control.title = player.video.muted ? "打开声音" : "静音";
-    }
+    const enable = !feedSoundActive();
+    setFeedSoundEnabled(enable, { unlock: true });
+    void playFeedPlayer(index);
   });
 
   slide.querySelector('[data-act="next"]')?.addEventListener("click", (e) => {
     e.stopPropagation();
+    showFeedControls();
     const next = state.feed.scroller?.querySelector(`[data-feed-idx="${index + 1}"]`);
     next?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
   });
@@ -2601,14 +2715,18 @@ function renderOtherVideosFeed(route, token) {
     <div class="feed-shell" id="feedShell">
       <h1 class="sr-only">其他视频</h1>
       <div class="feed-scroller" id="feedScroller"></div>
-      <div class="feed-empty-tip" id="feedTip">上下滑动切换，点按播放或暂停</div>
+      <div class="feed-empty-tip" id="feedTip">上下滑动切换，点按开启声音</div>
     </div>
   `;
 
   state.feed.scroller = $("feedScroller");
   state.feed.root = $("feedShell");
+  state.feed.onPointerActivity = () => showFeedControls();
+  state.feed.root?.addEventListener("pointermove", state.feed.onPointerActivity, { passive: true });
+  state.feed.root?.addEventListener("pointerdown", state.feed.onPointerActivity, { passive: true });
   appendFeedSlides();
   appendFeedSlides(); // two batches
+  updateFeedSoundControls();
   // 首屏 slide 轻微 fade（不干扰滚动）
   if (canAnimate() && state.feed.scroller) {
     const first = state.feed.scroller.querySelector(".feed-slide");
