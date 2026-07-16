@@ -1393,7 +1393,7 @@ function applyKindFilter(arr, kind) {
 }
 
 /**
- * 「全部」：仅有标题帖子，默认按时间倒序，可切换为会话内稳定随机
+ * 「全部」：仅有标题帖子，默认按 date_published 倒序，可切换为会话内稳定随机
  * 「其他图片/其他视频」：无标题帖子
  * 真实分类 / 标签 / 搜索：有标题按热度；纯搜索可命中无标题（pid 等）
  */
@@ -1831,7 +1831,7 @@ function syncChrome(route) {
     const chips = [
       `<button type="button" class="chip${!effectiveCat ? " active" : ""}" data-cat="" aria-pressed="${
         !effectiveCat ? "true" : "false"
-      }" title="仅有标题 · 最新优先">全部<span class="n">${(
+      }" title="仅有标题 · 发布时间倒序">全部<span class="n">${(
         state.titledCount || 0
       ).toLocaleString("zh-CN")}</span></button>`,
       ...state.categories.slice(0, 18).map((c) => {
@@ -2009,7 +2009,7 @@ async function renderList(route) {
     let modeHint = "热度";
     if (!route.cat && !route.tag && !route.q) {
       modeHint =
-        state.mediaOrder.posts === MEDIA_ORDER_RANDOM ? "有标题 · 随机" : "有标题 · 最新优先";
+        state.mediaOrder.posts === MEDIA_ORDER_RANDOM ? "有标题 · 随机" : "有标题 · 发布时间倒序";
     }
     else if (route.cat === CAT_OTHER_IMAGE || route.cat === CAT_OTHER_VIDEO) modeHint = "无标题";
     else if (route.tag) modeHint = `标签 · ${route.tag}`;

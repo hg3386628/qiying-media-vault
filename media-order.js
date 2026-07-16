@@ -32,14 +32,14 @@ export function orderMediaItems(items, mode, seed) {
   return shuffleIndices(source.length, seed).map((index) => source[index]);
 }
 
-function postTimeMs(post) {
-  const raw = post.date_published || post.date_modified || post.created || "";
-  const timestamp = Date.parse(raw);
+function publishedTimeMs(post) {
+  const timestamp = Date.parse(post.date_published || "");
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 export function orderPostsNewestFirst(items) {
   return [...items].sort(
-    (a, b) => postTimeMs(b) - postTimeMs(a) || Number(b.pid || 0) - Number(a.pid || 0)
+    (a, b) =>
+      publishedTimeMs(b) - publishedTimeMs(a) || Number(b.pid || 0) - Number(a.pid || 0)
   );
 }
