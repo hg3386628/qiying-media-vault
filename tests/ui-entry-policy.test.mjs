@@ -36,6 +36,8 @@ test("main tabs and media views expose compact order controls", () => {
   assert.equal(indexSource.includes("<span>黑料</span>"), true);
   assert.equal(indexSource.includes("<span>帖子</span>"), false);
   assert.equal(appSource.includes('data-order-switch="${kind}"'), true);
+  assert.equal(appSource.includes('setStatsMediaOrderControl("posts", route)'), true);
+  assert.equal(appSource.includes('kind === "posts" ? "最新" : "顺序"'), true);
   assert.equal(appSource.includes('mediaOrderControlHtml("images", orderMode)'), true);
   assert.equal(appSource.includes('setStatsMediaOrderControl("videos", route)'), true);
   assert.equal(styleSource.includes(".media-order-switch.compact"), true);

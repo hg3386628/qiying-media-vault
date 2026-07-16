@@ -14,6 +14,7 @@ import {
   MEDIA_ORDER_SEQUENTIAL,
   normalizeMediaOrder,
   orderMediaItems,
+  orderPostsNewestFirst,
   shuffleIndices,
 } from "./media-order.js";
 
@@ -335,6 +336,7 @@ const IMAGE_SIZE_MIN = 100;
 const IMAGE_SIZE_MAX = 300;
 const IMAGE_SIZE_STEP = 10;
 const DEFAULT_IMAGE_SIZE = 100;
+const POST_ORDER_KEY = "posts.postOrder";
 const IMAGE_ORDER_KEY = "posts.imageOrder";
 const VIDEO_ORDER_KEY = "posts.videoOrder";
 
@@ -371,6 +373,7 @@ const state = {
   /** 全部图片 · 显示大小 100–300 */
   imageScale: readImageScale(),
   mediaOrder: {
+    posts: readMediaOrder(POST_ORDER_KEY),
     images: readMediaOrder(IMAGE_ORDER_KEY),
     videos: readMediaOrder(VIDEO_ORDER_KEY),
   },
@@ -514,8 +517,12 @@ function readMediaOrder(storageKey) {
 function setMediaOrder(kind, mode) {
   const next = normalizeMediaOrder(mode);
   state.mediaOrder[kind] = next;
-  if (next === MEDIA_ORDER_RANDOM) state.mediaOrderSeed[kind] = createRandomSeed();
-  const storageKey = kind === "videos" ? VIDEO_ORDER_KEY : IMAGE_ORDER_KEY;
+  if (next === MEDIA_ORDER_RANDOM) {
+    if (kind === "posts") reshuffleAll();
+    else state.mediaOrderSeed[kind] = createRandomSeed();
+  }
+  const storageKey =
+    kind === "posts" ? POST_ORDER_KEY : kind === "videos" ? VIDEO_ORDER_KEY : IMAGE_ORDER_KEY;
   try {
     localStorage.setItem(storageKey, next);
   } catch {}
@@ -527,14 +534,16 @@ function mediaOrderLabel(mode) {
 }
 
 function mediaOrderControlHtml(kind, mode, compact = false) {
-  const label = kind === "videos" ? "视频播放顺序" : "图片浏览顺序";
+  const label =
+    kind === "posts" ? "黑料浏览顺序" : kind === "videos" ? "视频播放顺序" : "图片浏览顺序";
+  const sequentialLabel = kind === "posts" ? "最新" : "顺序";
   return `
     <div class="media-order-switch${compact ? " compact" : ""}" data-order-switch="${kind}" role="group" aria-label="${label}">
       <button type="button" class="media-order-option${
         mode === MEDIA_ORDER_SEQUENTIAL ? " active" : ""
       }" data-order="${MEDIA_ORDER_SEQUENTIAL}" aria-pressed="${
         mode === MEDIA_ORDER_SEQUENTIAL ? "true" : "false"
-      }">顺序</button>
+      }">${sequentialLabel}</button>
       <button type="button" class="media-order-option${
         mode === MEDIA_ORDER_RANDOM ? " active" : ""
       }" data-order="${MEDIA_ORDER_RANDOM}" aria-pressed="${
@@ -1384,7 +1393,7 @@ function applyKindFilter(arr, kind) {
 }
 
 /**
- * 「全部」：仅有标题帖子，随机顺序（会话内稳定）
+ * 「全部」：仅有标题帖子，默认按时间倒序，可切换为会话内稳定随机
  * 「其他图片/其他视频」：无标题帖子
  * 真实分类 / 标签 / 搜索：有标题按热度；纯搜索可命中无标题（pid 等）
  */
@@ -1398,8 +1407,12 @@ function filterPosts(route) {
 
   let arr;
   if (isAll) {
-    const order = ensureRandomOrder();
-    arr = order.map((i) => posts[i]);
+    if (state.mediaOrder.posts === MEDIA_ORDER_RANDOM) {
+      const order = ensureRandomOrder();
+      arr = order.map((i) => posts[i]);
+    } else {
+      arr = orderPostsNewestFirst((state.titledIndices || []).map((i) => posts[i]));
+    }
   } else if (isVirtual) {
     arr = posts.filter((p) => p._other === cat);
     if (q) arr = arr.filter((p) => matchPost(p, q));
@@ -1719,7 +1732,10 @@ function syncFilterPanel(route) {
     filterCount.hidden = count === 0;
     filterCount.textContent = count ? String(count) : "";
   }
-  if (filterShuffle) filterShuffle.hidden = !postsList || !isShuffleView(route);
+  if (filterShuffle) {
+    filterShuffle.hidden =
+      !postsList || !isShuffleView(route) || state.mediaOrder.posts !== MEDIA_ORDER_RANDOM;
+  }
   if (filterReset) filterReset.hidden = count === 0;
   if (filtersEl) {
     filtersEl.classList.toggle("is-collapsed", !state.filterOpen);
@@ -1779,7 +1795,9 @@ function wireMainTabs() {
       // 帖子 tab
       const nextCat = VIRTUAL_CATS.has(r.cat) ? "" : r.cat;
       const nextTag = VIRTUAL_CATS.has(r.cat) ? "" : r.tag;
-      if (!nextCat && !nextTag && !r.q) reshuffleAll();
+      if (!nextCat && !nextTag && !r.q && state.mediaOrder.posts === MEDIA_ORDER_RANDOM) {
+        reshuffleAll();
+      }
       const href = navHash(r, { page: 1, cat: nextCat, tag: nextTag });
       if (location.hash === href || (!location.hash && !nextCat && !nextTag)) {
         renderList({ ...r, page: 1, cat: nextCat, tag: nextTag });
@@ -1813,7 +1831,7 @@ function syncChrome(route) {
     const chips = [
       `<button type="button" class="chip${!effectiveCat ? " active" : ""}" data-cat="" aria-pressed="${
         !effectiveCat ? "true" : "false"
-      }" title="仅有标题 · 随机">全部<span class="n">${(
+      }" title="仅有标题 · 最新优先">全部<span class="n">${(
         state.titledCount || 0
       ).toLocaleString("zh-CN")}</span></button>`,
       ...state.categories.slice(0, 18).map((c) => {
@@ -1829,7 +1847,14 @@ function syncChrome(route) {
     catChips.querySelectorAll(".chip").forEach((btn) => {
       btn.addEventListener("click", () => {
         const nextCat = btn.getAttribute("data-cat") || "";
-        if (!nextCat && !effectiveCat && !route.tag) reshuffleAll();
+        if (
+          !nextCat &&
+          !effectiveCat &&
+          !route.tag &&
+          state.mediaOrder.posts === MEDIA_ORDER_RANDOM
+        ) {
+          reshuffleAll();
+        }
         const href = navHash(route, {
           page: 1,
           cat: nextCat,
@@ -1982,7 +2007,10 @@ async function renderList(route) {
     const items = filtered.slice(start, start + route.pageSize);
 
     let modeHint = "热度";
-    if (!route.cat && !route.tag && !route.q) modeHint = "有标题 · 随机";
+    if (!route.cat && !route.tag && !route.q) {
+      modeHint =
+        state.mediaOrder.posts === MEDIA_ORDER_RANDOM ? "有标题 · 随机" : "有标题 · 最新优先";
+    }
     else if (route.cat === CAT_OTHER_IMAGE || route.cat === CAT_OTHER_VIDEO) modeHint = "无标题";
     else if (route.tag) modeHint = `标签 · ${route.tag}`;
     else if (route.q && !route.cat) modeHint = "搜索";
@@ -2007,7 +2035,7 @@ async function renderList(route) {
         <div class="workspace-actions">
           <span class="result-count">${total.toLocaleString("zh-CN")} 条</span>
           ${
-            isShuffleView(route)
+            isShuffleView(route) && state.mediaOrder.posts === MEDIA_ORDER_RANDOM
               ? `<button type="button" class="shuffle-btn" id="shufflePosts">${icon(
                   "shuffle"
                 )}<span>换一批</span></button>`
@@ -2018,6 +2046,7 @@ async function renderList(route) {
       <section class="post-grid" aria-labelledby="listTitle">${items.map(postCardHtml).join("")}</section>
       ${pagerHtml({ ...route, page }, pages)}
     `);
+    if (isShuffleView(route)) setStatsMediaOrderControl("posts", route);
     bindImgFallback();
     bindPager({ ...route, page });
     // 卡片上的 tag 点击 → 按标签筛选（阻止进详情）

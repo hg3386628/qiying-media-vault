@@ -31,3 +31,15 @@ export function orderMediaItems(items, mode, seed) {
   if (normalizeMediaOrder(mode) !== MEDIA_ORDER_RANDOM) return source;
   return shuffleIndices(source.length, seed).map((index) => source[index]);
 }
+
+function postTimeMs(post) {
+  const raw = post.date_published || post.date_modified || post.created || "";
+  const timestamp = Date.parse(raw);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+export function orderPostsNewestFirst(items) {
+  return [...items].sort(
+    (a, b) => postTimeMs(b) - postTimeMs(a) || Number(b.pid || 0) - Number(a.pid || 0)
+  );
+}
