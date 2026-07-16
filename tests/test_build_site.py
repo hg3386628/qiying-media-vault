@@ -131,6 +131,14 @@ class BuildSiteTests(unittest.TestCase):
                 self.assertTrue(gz_path.exists(), f"missing {gz_path}")
                 self.assertEqual(path.read_bytes(), gzip.decompress(gz_path.read_bytes()))
 
+    def test_static_build_includes_frontend_policy_modules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            self.build.copy_static_files(output)
+            self.assertTrue((output / "feed-policy.js").exists())
+            self.assertTrue((output / "layout-policy.js").exists())
+            self.assertTrue((output / "media-order.js").exists())
+
     def test_real_source_round_trip_counts_and_shard_limits(self):
         source = ROOT / "media-data" / "posts.json"
         posts = json.loads(source.read_text())

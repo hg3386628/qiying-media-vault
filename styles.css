@@ -579,6 +579,22 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
+#statsText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-actions {
+  flex: none;
+  margin-left: auto;
+}
+
+.stats-actions[hidden] {
+  display: none;
+}
+
 .stats-dot {
   width: 6px;
   height: 6px;
@@ -1447,6 +1463,14 @@ kbd {
   gap: var(--space-4);
 }
 
+.wf-toolbar-controls {
+  width: min(100%, 560px);
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .wf-toolbar-hint {
   color: var(--text-subtle);
   font-size: 13px;
@@ -1466,6 +1490,11 @@ kbd {
   color: var(--text-muted);
 }
 
+.photo-size-control {
+  min-width: 0;
+  flex: 1;
+}
+
 .detail-size-label,
 .detail-size-value {
   font-size: 13px;
@@ -1483,6 +1512,52 @@ kbd {
   width: 100%;
   accent-color: var(--accent);
   cursor: pointer;
+}
+
+.media-order-switch {
+  min-height: 48px;
+  padding: 3px;
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-3);
+  background: var(--surface-1);
+}
+
+.media-order-option {
+  min-width: 52px;
+  min-height: 40px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-2);
+  color: var(--text-subtle);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.media-order-option:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.media-order-option.active {
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.media-order-switch.compact {
+  min-height: 28px;
+  padding: 2px;
+}
+
+.media-order-switch.compact .media-order-option {
+  min-width: 44px;
+  min-height: 24px;
+  padding: 0 6px;
+  font-size: 11px;
 }
 
 .waterfall {
@@ -2154,9 +2229,13 @@ kbd {
     flex-direction: column;
   }
 
-  .detail-size-control {
+  .wf-toolbar-controls {
     width: 100%;
-    grid-template-columns: auto minmax(90px, 1fr) 44px;
+  }
+
+  .detail-size-control {
+    width: auto;
+    grid-template-columns: auto minmax(64px, 1fr) 44px;
   }
 
   .detail-size-label {

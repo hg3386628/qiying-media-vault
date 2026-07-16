@@ -9,6 +9,13 @@ import {
   writeFeedSoundEnabled,
 } from "./feed-policy.js";
 import { resolveWaterfallWidth } from "./layout-policy.js";
+import {
+  MEDIA_ORDER_RANDOM,
+  MEDIA_ORDER_SEQUENTIAL,
+  normalizeMediaOrder,
+  orderMediaItems,
+  shuffleIndices,
+} from "./media-order.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -270,6 +277,7 @@ const searchClear = $("searchClear");
 const catChips = $("catChips");
 const tagChips = $("tagChips");
 const statsText = $("statsText");
+const statsActions = $("statsActions");
 const kindSeg = $("kindSeg");
 const filtersEl = $("filters");
 const filterToggle = $("filterToggle");
@@ -327,6 +335,8 @@ const IMAGE_SIZE_MIN = 100;
 const IMAGE_SIZE_MAX = 300;
 const IMAGE_SIZE_STEP = 10;
 const DEFAULT_IMAGE_SIZE = 100;
+const IMAGE_ORDER_KEY = "posts.imageOrder";
+const VIDEO_ORDER_KEY = "posts.videoOrder";
 
 /** Virtual buckets for posts with no scraped title (source 404). Route key 仍用「其他图片」；UI 展示「全部图片」 */
 const CAT_OTHER_IMAGE = "其他图片";
@@ -360,6 +370,14 @@ const state = {
   titledIndices: null, // int[] indices of posts with real titles
   /** 全部图片 · 显示大小 100–300 */
   imageScale: readImageScale(),
+  mediaOrder: {
+    images: readMediaOrder(IMAGE_ORDER_KEY),
+    videos: readMediaOrder(VIDEO_ORDER_KEY),
+  },
+  mediaOrderSeed: {
+    images: createRandomSeed(),
+    videos: createRandomSeed(),
+  },
 
   /** 全部图片 · 瀑布流无限滚动（参考 xrw-album） */
   waterfall: {
@@ -479,6 +497,75 @@ function setImageScale(value) {
     // private / blocked storage
   }
   return state.imageScale;
+}
+
+function createRandomSeed() {
+  return Math.floor(Math.random() * 0x7fffffff) || 1;
+}
+
+function readMediaOrder(storageKey) {
+  try {
+    return normalizeMediaOrder(localStorage.getItem(storageKey));
+  } catch {
+    return MEDIA_ORDER_SEQUENTIAL;
+  }
+}
+
+function setMediaOrder(kind, mode) {
+  const next = normalizeMediaOrder(mode);
+  state.mediaOrder[kind] = next;
+  if (next === MEDIA_ORDER_RANDOM) state.mediaOrderSeed[kind] = createRandomSeed();
+  const storageKey = kind === "videos" ? VIDEO_ORDER_KEY : IMAGE_ORDER_KEY;
+  try {
+    localStorage.setItem(storageKey, next);
+  } catch {}
+  return next;
+}
+
+function mediaOrderLabel(mode) {
+  return mode === MEDIA_ORDER_RANDOM ? "随机" : "顺序";
+}
+
+function mediaOrderControlHtml(kind, mode, compact = false) {
+  const label = kind === "videos" ? "视频播放顺序" : "图片浏览顺序";
+  return `
+    <div class="media-order-switch${compact ? " compact" : ""}" data-order-switch="${kind}" role="group" aria-label="${label}">
+      <button type="button" class="media-order-option${
+        mode === MEDIA_ORDER_SEQUENTIAL ? " active" : ""
+      }" data-order="${MEDIA_ORDER_SEQUENTIAL}" aria-pressed="${
+        mode === MEDIA_ORDER_SEQUENTIAL ? "true" : "false"
+      }">顺序</button>
+      <button type="button" class="media-order-option${
+        mode === MEDIA_ORDER_RANDOM ? " active" : ""
+      }" data-order="${MEDIA_ORDER_RANDOM}" aria-pressed="${
+        mode === MEDIA_ORDER_RANDOM ? "true" : "false"
+      }">随机</button>
+    </div>`;
+}
+
+function bindMediaOrderControl(root, kind, route) {
+  root?.querySelectorAll(`[data-order-switch="${kind}"] [data-order]`).forEach((button) => {
+    button.addEventListener("click", () => {
+      const next = normalizeMediaOrder(button.dataset.order);
+      if (state.mediaOrder[kind] === next) return;
+      setMediaOrder(kind, next);
+      renderList({ ...route, page: 1 });
+    });
+  });
+}
+
+function setStatsMediaOrderControl(kind, route) {
+  if (!statsActions) return;
+  statsActions.hidden = false;
+  statsActions.innerHTML = mediaOrderControlHtml(kind, state.mediaOrder[kind], true);
+  bindMediaOrderControl(statsActions, kind, route);
+  syncChromeHeight();
+}
+
+function clearStatsActions() {
+  if (!statsActions) return;
+  statsActions.hidden = true;
+  statsActions.innerHTML = "";
 }
 
 function imgUrl(src) {
@@ -1019,30 +1106,6 @@ async function loadPostDetail(pid) {
   };
 }
 
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return function next() {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** Fisher–Yates with seeded RNG — stable for pagination */
-function shuffleIndices(n, seed) {
-  const idx = Array.from({ length: n }, (_, i) => i);
-  const rnd = mulberry32(seed);
-  for (let i = n - 1; i > 0; i--) {
-    const j = Math.floor(rnd() * (i + 1));
-    const tmp = idx[i];
-    idx[i] = idx[j];
-    idx[j] = tmp;
-  }
-  return idx;
-}
-
 function postTimeMs(p) {
   const raw = p.date_published || p.date_modified || p.created || "";
   const t = Date.parse(raw);
@@ -1375,6 +1438,7 @@ function navHash(route, patch = {}) {
 function setMain(html) {
   teardownSpecialModes();
   closeLightbox();
+  clearStatsActions();
   main.innerHTML = html;
 }
 
@@ -1881,7 +1945,7 @@ function listHeading(route) {
   if (route.kind === "image") return "图片帖子";
   if (route.kind === "video") return "视频帖子";
   if (route.kind === "mixed") return "图文视频";
-  return "帖子";
+  return "黑料";
 }
 
 function isShuffleView(route) {
@@ -2156,7 +2220,12 @@ function renderOtherImagesWaterfall(route, token) {
   document.title = `${CAT_OTHER_IMAGE_LABEL} · 栖影`;
   document.body.classList.remove("feed-mode");
 
-  const all = buildOtherImageItems(route);
+  const orderMode = state.mediaOrder.images;
+  const all = orderMediaItems(
+    buildOtherImageItems(route),
+    orderMode,
+    state.mediaOrderSeed.images
+  ).map((item, sourceIndex) => ({ ...item, sourceIndex }));
   state.waterfall.items = all;
   state.waterfall.cursor = 0;
   state.waterfall.loading = false;
@@ -2166,7 +2235,9 @@ function renderOtherImagesWaterfall(route, token) {
   state.waterfall._token = token;
 
   const scale = state.imageScale || DEFAULT_IMAGE_SIZE;
-  statsText.textContent = `${CAT_OTHER_IMAGE_LABEL} · ${all.length.toLocaleString("zh-CN")} 张 · 显示 ${scale}%`;
+  statsText.textContent = `${CAT_OTHER_IMAGE_LABEL} · ${all.length.toLocaleString(
+    "zh-CN"
+  )} 张 · ${mediaOrderLabel(orderMode)} · 显示 ${scale}%`;
 
   if (!all.length) {
     setMain(messageHtml("没有图片", `${CAT_OTHER_IMAGE_LABEL}分类为空`));
@@ -2186,12 +2257,15 @@ function renderOtherImagesWaterfall(route, token) {
         <span class="result-count">${all.length.toLocaleString("zh-CN")} 张</span>
       </header>
       <div class="wf-toolbar">
-        <label class="detail-size-control photo-size-control" data-photo-size>
-          ${icon("zoom-in")}
-          <span class="detail-size-label">显示大小</span>
-          <input type="range" id="wfSizeSlider" min="${IMAGE_SIZE_MIN}" max="${IMAGE_SIZE_MAX}" step="${IMAGE_SIZE_STEP}" value="${scale}" aria-label="调整全部图片显示大小" />
-          <span class="detail-size-value" id="wfSizeValue">${scale}%</span>
-        </label>
+        <div class="wf-toolbar-controls">
+          <label class="detail-size-control photo-size-control" data-photo-size>
+            ${icon("zoom-in")}
+            <span class="detail-size-label">显示大小</span>
+            <input type="range" id="wfSizeSlider" min="${IMAGE_SIZE_MIN}" max="${IMAGE_SIZE_MAX}" step="${IMAGE_SIZE_STEP}" value="${scale}" aria-label="调整全部图片显示大小" />
+            <span class="detail-size-value" id="wfSizeValue">${scale}%</span>
+          </label>
+          ${mediaOrderControlHtml("images", orderMode)}
+        </div>
         <span class="wf-toolbar-hint">选择图片进入预览，使用方向键切换</span>
       </div>
       <div class="waterfall" id="waterfall" aria-label="${CAT_OTHER_IMAGE_LABEL}瀑布流"></div>
@@ -2207,6 +2281,7 @@ function renderOtherImagesWaterfall(route, token) {
   const sentinel = $("wfSentinel");
   const sizeSlider = $("wfSizeSlider");
   const sizeValue = $("wfSizeValue");
+  bindMediaOrderControl(main, "images", route);
 
   const rebuildFromStart = () => {
     if (token !== state.routeToken) return;
@@ -2217,7 +2292,9 @@ function renderOtherImagesWaterfall(route, token) {
     if (grid) grid.innerHTML = "";
     appendBatch();
     if (all.length > WATERFALL_BATCH) appendBatch();
-    statsText.textContent = `${CAT_OTHER_IMAGE_LABEL} · ${all.length.toLocaleString("zh-CN")} 张 · 显示 ${state.imageScale}%`;
+    statsText.textContent = `${CAT_OTHER_IMAGE_LABEL} · ${all.length.toLocaleString(
+      "zh-CN"
+    )} 张 · ${mediaOrderLabel(orderMode)} · 显示 ${state.imageScale}%`;
   };
 
   sizeSlider?.addEventListener("input", () => {
@@ -2641,7 +2718,7 @@ function syncFeedPlayback(activeIndex) {
   if (it) {
     statsText.textContent = `其他视频 · ${activeIndex + 1}/${state.feed.items.length.toLocaleString(
       "zh-CN"
-    )} · pid ${it.pid} · 上滑切换`;
+    )} · ${mediaOrderLabel(state.mediaOrder.videos)} · pid ${it.pid} · 上滑切换`;
   }
   showFeedControls();
 }
@@ -2725,12 +2802,19 @@ function bindFeedSlide(index) {
 
 function renderOtherVideosFeed(route, token) {
   document.title = "其他视频 · 栖影";
-  const all = buildOtherVideoItems(route);
+  const orderMode = state.mediaOrder.videos;
+  const all = orderMediaItems(
+    buildOtherVideoItems(route),
+    orderMode,
+    state.mediaOrderSeed.videos
+  );
   state.feed.items = all;
   state.feed.cursor = 0;
   state.feed.active = -1;
 
-  statsText.textContent = `其他视频 · ${all.length.toLocaleString("zh-CN")} 条 · 上下滑动切换`;
+  statsText.textContent = `其他视频 · ${all.length.toLocaleString(
+    "zh-CN"
+  )} 条 · ${mediaOrderLabel(orderMode)} · 上下滑动切换`;
 
   if (!all.length) {
     setMain(messageHtml("没有视频", "其他视频分类为空"));
@@ -2749,6 +2833,7 @@ function renderOtherVideosFeed(route, token) {
 
   state.feed.scroller = $("feedScroller");
   state.feed.root = $("feedShell");
+  setStatsMediaOrderControl("videos", route);
   state.feed.onPointerActivity = () => showFeedControls();
   state.feed.root?.addEventListener("pointermove", state.feed.onPointerActivity, { passive: true });
   state.feed.root?.addEventListener("pointerdown", state.feed.onPointerActivity, { passive: true });

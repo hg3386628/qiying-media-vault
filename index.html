@@ -8,7 +8,7 @@
   <meta name="theme-color" content="#09090b" />
   <title>栖影</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%233b82f6'/%3E%3Cpath d='M16 18h32v10H16zm4 14h24v18H20z' fill='none' stroke='white' stroke-width='5' stroke-linejoin='round'/%3E%3Cpath d='M27 39h10' stroke='white' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="./styles.css?v=20260715-11" />
+  <link rel="stylesheet" href="./styles.css?v=20260716-1" />
   <script src="./vendor/hls.min.js" defer></script>
   <script src="./vendor/anime.iife.min.js?v=4.0.2" defer></script>
   <script>
@@ -135,7 +135,7 @@
         <nav class="main-tabs" id="mainTabs" aria-label="主分区">
           <button type="button" class="main-tab active" data-tab="posts" aria-current="page">
             <svg class="icon" aria-hidden="true"><use href="#i-grid"></use></svg>
-            <span>帖子</span><span class="n" id="tabCountPosts"></span>
+            <span>黑料</span><span class="n" id="tabCountPosts"></span>
           </button>
           <button type="button" class="main-tab" data-tab="other-image">
             <svg class="icon" aria-hidden="true"><use href="#i-image"></use></svg>
@@ -196,9 +196,10 @@
         </div>
       </div>
 
-      <div class="stats-bar" id="statsBar" role="status" aria-live="polite" aria-atomic="true">
+      <div class="stats-bar" id="statsBar">
         <span class="stats-dot" aria-hidden="true"></span>
-        <span id="statsText">加载中…</span>
+        <span id="statsText" role="status" aria-live="polite" aria-atomic="true">加载中…</span>
+        <div class="stats-actions" id="statsActions" hidden></div>
       </div>
     </header>
 
@@ -234,6 +235,6 @@
     <svg class="icon" aria-hidden="true"><use href="#i-arrow-up"></use></svg>
   </button>
 
-  <script src="./app.js?v=20260715-16" type="module"></script>
+  <script src="./app.js?v=20260716-1" type="module"></script>
 </body>
 </html>

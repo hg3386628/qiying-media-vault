@@ -21,7 +21,14 @@ DETAIL_BUCKETS = 96
 IMAGE_SHARD_SIZE = 1_500
 VIDEO_SHARD_SIZE = 1_000
 
-STATIC_FILES = ("index.html", "styles.css", "app.js", "feed-policy.js", "layout-policy.js")
+STATIC_FILES = (
+    "index.html",
+    "styles.css",
+    "app.js",
+    "feed-policy.js",
+    "layout-policy.js",
+    "media-order.js",
+)
 VENDOR_FILES = ("hls.min.js", "anime.iife.min.js")
 
 

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const appSource = await readFile(new URL("../app.js", import.meta.url), "utf8");
+const indexSource = await readFile(new URL("../index.html", import.meta.url), "utf8");
 const styleSource = await readFile(new URL("../styles.css", import.meta.url), "utf8");
 
 test("external source and original-image entry points stay removed", () => {
@@ -29,4 +30,13 @@ test("image lightbox supports horizontal touch swipes without hijacking vertical
   assert.equal(appSource.includes('lbBody?.addEventListener("pointerdown"'), true);
   assert.equal(appSource.includes('lbBody?.addEventListener("pointerup"'), true);
   assert.equal(styleSource.includes("touch-action: pan-y"), true);
+});
+
+test("main tabs and media views expose compact order controls", () => {
+  assert.equal(indexSource.includes("<span>黑料</span>"), true);
+  assert.equal(indexSource.includes("<span>帖子</span>"), false);
+  assert.equal(appSource.includes('data-order-switch="${kind}"'), true);
+  assert.equal(appSource.includes('mediaOrderControlHtml("images", orderMode)'), true);
+  assert.equal(appSource.includes('setStatsMediaOrderControl("videos", route)'), true);
+  assert.equal(styleSource.includes(".media-order-switch.compact"), true);
 });
