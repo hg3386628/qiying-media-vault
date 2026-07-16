@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = ROOT / "media-data" / "posts.json"
 DEFAULT_OUTPUT = ROOT / "dist"
 
-CATALOG_SHARD_SIZE = 1_000
+CATALOG_SHARD_SIZE = 800
 DETAIL_BUCKETS = 96
 IMAGE_SHARD_SIZE = 1_500
 VIDEO_SHARD_SIZE = 1_000

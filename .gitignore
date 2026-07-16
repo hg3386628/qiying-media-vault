@@ -17,3 +17,6 @@ media-data/post_meta.jsonl
 media-data/meta.json
 media-data/meta_index.json
 media-data/scrape_state.json
+media-data/sync_source_state.json
+media-data/*.bak-*
+media-data/v2/
