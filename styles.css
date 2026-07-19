@@ -1717,6 +1717,9 @@ kbd {
   background: #050605;
   scroll-snap-align: start;
   scroll-snap-stop: always;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
   cursor: pointer;
 }
 
@@ -1734,6 +1737,7 @@ kbd {
   height: 100%;
   object-fit: contain;
   background: #050605;
+  -webkit-touch-callout: none;
 }
 
 .feed-poster {
@@ -1748,6 +1752,27 @@ kbd {
   z-index: 2;
 }
 
+.feed-playback-toggle {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: transparent;
+  touch-action: pan-y;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.feed-playback-toggle:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: -4px;
+}
+
 .feed-shade {
   position: absolute;
   inset: 0;
@@ -1759,7 +1784,7 @@ kbd {
   position: absolute;
   left: var(--space-3);
   right: 78px;
-  bottom: max(var(--space-3), var(--safe-bottom));
+  bottom: max(54px, calc(var(--safe-bottom) + 44px));
   z-index: 5;
   padding: var(--space-3);
   display: grid;
@@ -1799,7 +1824,7 @@ kbd {
 .feed-actions {
   position: absolute;
   right: var(--space-3);
-  bottom: max(96px, calc(var(--safe-bottom) + 82px));
+  bottom: max(132px, calc(var(--safe-bottom) + 120px));
   z-index: 6;
   display: flex;
   flex-direction: column;
@@ -1839,6 +1864,122 @@ kbd {
   color: rgba(255, 255, 255, 0.82);
   font-size: 12px;
   font-weight: 650;
+}
+
+.feed-speed {
+  position: absolute;
+  left: 50%;
+  top: max(var(--space-4), var(--safe-top));
+  z-index: 9;
+  min-width: 52px;
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-2);
+  background: rgba(5, 6, 5, 0.78);
+  color: #ffffff;
+  font-family: "DIN Alternate", "Avenir Next", sans-serif;
+  font-size: 15px;
+  font-weight: 750;
+  transform: translateX(-50%);
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.feed-speed[hidden] {
+  display: none;
+}
+
+.feed-progress {
+  position: absolute;
+  left: max(var(--space-3), var(--safe-left));
+  right: max(var(--space-3), var(--safe-right));
+  bottom: max(6px, var(--safe-bottom));
+  z-index: 9;
+  min-height: 38px;
+  padding: 6px var(--space-2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 78px;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-2);
+  background: rgba(5, 6, 5, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.feed-progress-range {
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.feed-progress-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0,
+    var(--accent) var(--feed-progress),
+    rgba(255, 255, 255, 0.28) var(--feed-progress),
+    rgba(255, 255, 255, 0.28) 100%
+  );
+}
+
+.feed-progress-range::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: var(--accent);
+  appearance: none;
+  -webkit-appearance: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.feed-progress-range::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.feed-progress-range::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.feed-progress-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.feed-progress-range:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.feed-progress-time {
+  color: rgba(255, 255, 255, 0.8);
+  font-family: "DIN Alternate", "Avenir Next", sans-serif;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .feed-hint {
