@@ -119,6 +119,56 @@ class BuildSiteTests(unittest.TestCase):
             self.assertEqual([202], [item["p"] for item in videos])
             self.assertNotIn(303, {item["p"] for item in images + videos})
 
+    def test_video_mode_excludes_known_unavailable_sources(self):
+        self.assertTrue(
+            self.build.is_video_feed_candidate(
+                {"path": "/READY.WEBM?download=1", "status": "1"}
+            )
+        )
+        self.assertFalse(
+            self.build.is_video_feed_candidate({"path": "/missing-status.MP4#preview"})
+        )
+        self.assertTrue(self.build.is_video_feed_candidate({"path": "/legacy.m3u8"}))
+
+        posts = [
+            *self.posts,
+            {
+                "pid": 404,
+                "created": "2026-07-15 13:00:00",
+                "image_count": 0,
+                "video_count": 3,
+                "media_count": 3,
+                "images": [],
+                "videos": [
+                    {"id": 4, "path": "/dead.mp4", "status": "0"},
+                    {"id": 5, "path": "/ready.mp4", "status": "1"},
+                    {"id": 6, "path": "/ready.m3u8", "status": "1"},
+                ],
+            },
+            {
+                "pid": 505,
+                "created": "2026-07-15 14:00:00",
+                "image_count": 0,
+                "video_count": 1,
+                "media_count": 1,
+                "images": [],
+                "videos": [{"id": 7, "path": "/unconverted.mov", "status": "3"}],
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            manifest = self.build.build_data(posts, output)
+            videos = []
+            for item in manifest["modes"]["videos"]["files"]:
+                videos.extend(json.loads((output / item["file"]).read_text()))
+
+            self.assertEqual(
+                {"/v.m3u8", "/ready.mp4", "/ready.m3u8"},
+                {item["q"] for item in videos},
+            )
+            self.assertEqual(2, manifest["stats"]["other_videos"])
+
     def test_every_json_has_deterministic_gzip_twin(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp)
@@ -156,11 +206,22 @@ class BuildSiteTests(unittest.TestCase):
             details = []
             for item in manifest["details"]["files"]:
                 details.extend(json.loads((output / item["file"]).read_text()))
+            mode_videos = []
+            for item in manifest["modes"]["videos"]["files"]:
+                mode_videos.extend(json.loads((output / item["file"]).read_text()))
 
             self.assertEqual(expected_pids, {int(post["p"]) for post in catalog})
             self.assertEqual(expected_pids, {int(post["p"]) for post in details})
             self.assertEqual(expected_images, sum(len(post["i"]) for post in details))
             self.assertEqual(expected_videos, sum(len(post["v"]) for post in details))
+            self.assertTrue(all(str(item.get("s", "")) in {"", "1"} for item in mode_videos))
+            self.assertTrue(
+                all(
+                    not str(item.get("q", "")).lower().endswith((".mp4", ".webm", ".mov"))
+                    or str(item.get("s", "")) == "1"
+                    for item in mode_videos
+                )
+            )
             self.assertLessEqual(
                 max(item["bytes"] for item in manifest["catalog"]["files"]),
                 525 * 1024,

@@ -1705,6 +1705,15 @@ kbd {
   display: none;
 }
 
+.feed-empty {
+  min-height: 100%;
+  padding: var(--space-5);
+}
+
+.feed-empty .more-btn {
+  margin-top: var(--space-3);
+}
+
 .feed-slide {
   position: relative;
   width: 100%;

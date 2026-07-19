@@ -9,7 +9,11 @@ import {
   FEED_LONG_PRESS_RATE,
   bindFeedProgressControl,
   createFeedLongPressController,
+  findEligibleFeedIndex,
   feedProgressPercent,
+  isFeedVideoEligible,
+  isTerminalFeedVideoError,
+  listEligibleFeedIndexes,
   listFeedPlayerIndexes,
   readFeedSoundEnabled,
   resolveFeedDuration,
@@ -411,6 +415,8 @@ const state = {
     onPointerActivity: null,
     controlsTimer: 0,
     holdControllers: new Map(),
+    unavailablePaths: new Set(),
+    skipFrame: 0,
     soundEnabled: readFeedSoundEnabled(),
     soundUnlocked: false,
   },
@@ -825,17 +831,25 @@ function createVideoPlayer(video, rawPath, { onReady, onError } = {}) {
       if (destroyed) return;
       const base = hosts[Math.min(hostIdx, hosts.length - 1)];
       const src = progressivePlayUrl(rawPath, base);
+      const cleanupAttempt = () => {
+        video.removeEventListener("loadeddata", onOk);
+        video.removeEventListener("error", onFail);
+      };
       const onOk = () => {
+        video.removeEventListener("loadeddata", onOk);
         if (!destroyed) onReady && onReady();
       };
       const onFail = () => {
         if (destroyed) return;
+        const mediaCode = Number(video.error?.code) || 0;
+        cleanupAttempt();
         if (hostIdx < hosts.length - 1) {
           hostIdx += 1;
           tryLoad();
           return;
         }
-        onError && onError({ details: "progressive-load-error", type: "networkError" });
+        onError &&
+          onError({ details: "progressive-load-error", type: "networkError", mediaCode });
       };
       video.addEventListener("loadeddata", onOk, { once: true });
       video.addEventListener("error", onFail, { once: true });
@@ -863,18 +877,52 @@ function createVideoPlayer(video, rawPath, { onReady, onError } = {}) {
   // HLS m3u8
   if (!window.Hls || !Hls.isSupported()) {
     const url = hlsPlayUrl(rawPath);
-    if (video.canPlayType("application/vnd.apple.mpegurl") && url) {
-      video.src = url;
-      video.addEventListener("loadedmetadata", () => onReady && onReady(), { once: true });
+    const nativeHls = Boolean(video.canPlayType("application/vnd.apple.mpegurl"));
+    if (!url || !nativeHls) {
+      onError && onError({ details: "no-hls-support", type: "mediaError" });
       return null;
     }
-    if (url) {
-      video.src = url;
-      video.addEventListener("loadeddata", () => onReady && onReady(), { once: true });
-      return null;
+    let destroyed = false;
+    const cleanupNative = () => {
+      video.removeEventListener("loadedmetadata", onNativeReady);
+      video.removeEventListener("error", onNativeError);
+    };
+    const onNativeReady = () => {
+      video.removeEventListener("loadedmetadata", onNativeReady);
+      if (!destroyed) onReady && onReady();
+    };
+    const onNativeError = () => {
+      cleanupNative();
+      if (!destroyed) {
+        onError &&
+          onError({
+            details: "native-hls-error",
+            type: "mediaError",
+            mediaCode: Number(video.error?.code) || 0,
+          });
+      }
+    };
+    video.addEventListener("loadedmetadata", onNativeReady, { once: true });
+    video.addEventListener("error", onNativeError, { once: true });
+    video.src = url;
+    try {
+      video.load();
+    } catch {
+      onNativeError();
     }
-    onError && onError({ details: "no-hls-support" });
-    return null;
+    return {
+      get instance() {
+        return null;
+      },
+      destroy() {
+        destroyed = true;
+        cleanupNative();
+        try {
+          video.removeAttribute("src");
+          video.load();
+        } catch {}
+      },
+    };
   }
 
   let hostIdx = 0;
@@ -1500,6 +1548,10 @@ function teardownSpecialModes() {
   if (state.feed.controlsTimer) {
     clearTimeout(state.feed.controlsTimer);
     state.feed.controlsTimer = 0;
+  }
+  if (state.feed.skipFrame) {
+    cancelAnimationFrame(state.feed.skipFrame);
+    state.feed.skipFrame = 0;
   }
   state.feed.items = [];
   state.feed.cursor = 0;
@@ -2466,13 +2518,18 @@ function renderOtherImagesWaterfall(route, token) {
 /* ---------- 其他视频：抖音式竖滑 HLS（tiktok-hls-feed 思路） ---------- */
 
 function buildOtherVideoItems(route) {
-  if (state.dataManifest && state.modeItems.videos) {
-    const items = [...state.modeItems.videos];
-    items.sort((a, b) => {
+  const prioritize = (items) => {
+    const eligible = items.filter((item) =>
+      isFeedVideoEligible(item, state.feed.unavailablePaths)
+    );
+    eligible.sort((a, b) => {
       const rank = (it) => (it.kind === "hls" ? 0 : it.kind === "mp4" ? 2 : 1);
       return rank(a) - rank(b);
     });
-    return items;
+    return eligible;
+  };
+  if (state.dataManifest && state.modeItems.videos) {
+    return prioritize([...state.modeItems.videos]);
   }
   const posts = filterPosts({ ...route, cat: CAT_OTHER_VIDEO, q: route.q || "", tag: "" });
   const items = [];
@@ -2500,12 +2557,7 @@ function buildOtherVideoItems(route) {
       });
     }
   }
-  // HLS 优先
-  items.sort((a, b) => {
-    const rank = (it) => (it.kind === "hls" ? 0 : it.kind === "mp4" ? 2 : 1);
-    return rank(a) - rank(b);
-  });
-  return items;
+  return prioritize(items);
 }
 
 function feedSoundActive() {
@@ -2588,6 +2640,112 @@ function setFeedPlaybackRate(index, accelerated) {
   const speed = slide.querySelector(".feed-speed");
   if (speed) speed.hidden = !accelerated;
   return true;
+}
+
+function feedEligibleIndexes(limit = state.feed.items.length) {
+  return listEligibleFeedIndexes(state.feed.items, state.feed.unavailablePaths, limit);
+}
+
+function feedAdjacentIndex(index, direction) {
+  return findEligibleFeedIndex(
+    state.feed.items,
+    state.feed.unavailablePaths,
+    index + (direction < 0 ? -1 : 1),
+    direction
+  );
+}
+
+function scrollFeedToIndex(index, behavior = "instant") {
+  const scroller = state.feed.scroller;
+  if (!scroller || index < 0) return false;
+  let slide = scroller.querySelector(`[data-feed-idx="${index}"]`);
+  while (!slide && state.feed.cursor < state.feed.items.length) {
+    const previousCursor = state.feed.cursor;
+    appendFeedSlides();
+    if (state.feed.cursor === previousCursor) break;
+    slide = scroller.querySelector(`[data-feed-idx="${index}"]`);
+  }
+  if (!slide || slide.hidden) return false;
+  slide.scrollIntoView({
+    behavior: behavior === "smooth" ? "smooth" : "instant",
+    block: "start",
+  });
+  return true;
+}
+
+function feedRetryMessage(error) {
+  if (navigator.onLine === false) return "网络不可用 · 点击重试";
+  if (error?.details === "no-hls-support") return "当前浏览器不支持此视频";
+  return "暂时无法播放 · 点击重试";
+}
+
+function markFeedRetryable(index, error) {
+  const path = String(state.feed.items[index]?.path || "");
+  console.warn("[feed video retryable]", path, error?.details || error?.type || error);
+  destroyFeedPlayer(index);
+  if (state.feed.active === index) showFeedHint(index, feedRetryMessage(error));
+}
+
+function showFeedEmptyState() {
+  state.feed.active = -1;
+  destroyAllFeedPlayers();
+  for (const interaction of state.feed.holdControllers.values()) interaction.destroy();
+  state.feed.holdControllers.clear();
+  const scroller = state.feed.scroller;
+  if (!scroller) return;
+  scroller.innerHTML = `
+    <div class="state feed-empty" role="status" aria-live="polite">
+      <div class="state-icon" aria-hidden="true">${icon("video")}</div>
+      <div class="state-title">暂无可播放视频</div>
+      <div class="state-sub">当前视频源均已失效或尚未转码</div>
+      <button type="button" class="more-btn feed-retry-btn">${icon(
+        "play"
+      )}<span>重新检测</span></button>
+    </div>`;
+  scroller.querySelector(".feed-retry-btn")?.addEventListener("click", () => {
+    state.feed.unavailablePaths.clear();
+    void route();
+  });
+  statsText.textContent = "其他视频 · 暂无可播放视频";
+}
+
+function markFeedUnavailable(index, error) {
+  const item = state.feed.items[index];
+  const path = String(item?.path || "");
+  if (!path || state.feed.unavailablePaths.has(path)) return;
+
+  state.feed.unavailablePaths.add(path);
+  for (let candidateIndex = 0; candidateIndex < state.feed.items.length; candidateIndex += 1) {
+    if (state.feed.items[candidateIndex]?.path !== path) continue;
+    destroyFeedPlayer(candidateIndex);
+    const slide = state.feed.scroller?.querySelector(`[data-feed-idx="${candidateIndex}"]`);
+    if (slide) {
+      slide.hidden = true;
+      slide.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  console.warn("[feed video hidden]", path, error?.details || error?.type || error);
+  if (state.feed.skipFrame) cancelAnimationFrame(state.feed.skipFrame);
+  const token = state.routeToken;
+  const scroller = state.feed.scroller;
+  state.feed.skipFrame = requestAnimationFrame(() => {
+    state.feed.skipFrame = 0;
+    if (token !== state.routeToken || scroller !== state.feed.scroller) return;
+    const activeIndex = state.feed.active;
+    if (activeIndex >= 0 && !isFeedVideoEligible(state.feed.items[activeIndex], state.feed.unavailablePaths)) {
+      const forwardIndex = feedAdjacentIndex(activeIndex, 1);
+      const nextIndex = forwardIndex >= 0 ? forwardIndex : feedAdjacentIndex(activeIndex, -1);
+      if (nextIndex >= 0) {
+        scrollFeedToIndex(nextIndex);
+        syncFeedPlayback(nextIndex);
+      } else {
+        showFeedEmptyState();
+      }
+      return;
+    }
+    if (activeIndex >= 0) scrollFeedToIndex(activeIndex);
+  });
 }
 
 function showFeedControls(timeoutMs = FEED_CONTROLS_HIDE_MS) {
@@ -2740,6 +2898,8 @@ function ensureFeedPlayer(index) {
   slide.classList.add("is-loading");
   const loader = slide.querySelector(".feed-loader");
   if (loader) loader.hidden = false;
+  const feedToken = state.routeToken;
+  const feedScroller = state.feed.scroller;
 
   const video = document.createElement("video");
   video.className = "feed-video";
@@ -2772,14 +2932,16 @@ function ensureFeedPlayer(index) {
       onError: (data) => {
         slide.classList.remove("is-loading");
         if (loader) loader.hidden = true;
-        slide.classList.add("needs-tap");
-        const hint = slide.querySelector(".feed-hint");
-        if (hint) {
-          hint.hidden = false;
-          const kind = isProgressivePath(it.path) ? "源失效/未转码" : "播放失败";
-          hint.textContent = `${kind} · 上滑下一条`;
-        }
-        console.warn("[feed video]", it.path, data?.details || data?.type || data);
+        queueMicrotask(() => {
+          if (
+            feedToken === state.routeToken &&
+            feedScroller === state.feed.scroller &&
+            slide.isConnected
+          ) {
+            if (isTerminalFeedVideoError(data)) markFeedUnavailable(index, data);
+            else markFeedRetryable(index, data);
+          }
+        });
       },
     });
     hls = hlsWrap?.instance || null;
@@ -2814,14 +2976,47 @@ function ensureFeedPlayer(index) {
 }
 
 function syncFeedPlayback(activeIndex) {
+  if (!isFeedVideoEligible(state.feed.items[activeIndex], state.feed.unavailablePaths)) {
+    const forwardIndex = findEligibleFeedIndex(
+      state.feed.items,
+      state.feed.unavailablePaths,
+      activeIndex + 1,
+      1
+    );
+    const replacement =
+      forwardIndex >= 0
+        ? forwardIndex
+        : findEligibleFeedIndex(
+            state.feed.items,
+            state.feed.unavailablePaths,
+            activeIndex - 1,
+            -1
+          );
+    if (replacement < 0) return;
+    activeIndex = replacement;
+    scrollFeedToIndex(activeIndex);
+  }
+  let eligible = feedEligibleIndexes(state.feed.cursor);
+  let activePosition = eligible.indexOf(activeIndex);
+  if (activePosition < 0) {
+    if (!scrollFeedToIndex(activeIndex)) return;
+    eligible = feedEligibleIndexes(state.feed.cursor);
+    activePosition = eligible.indexOf(activeIndex);
+    if (activePosition < 0) return;
+  }
   state.feed.active = activeIndex;
-  // ensure nearby
-  for (let i = activeIndex - FEED_PRELOAD; i <= activeIndex + FEED_PRELOAD; i++) {
-    if (i >= 0 && i < state.feed.cursor) ensureFeedPlayer(i);
+  const nearby = new Set(
+    eligible.slice(
+      Math.max(0, activePosition - FEED_PRELOAD),
+      Math.min(eligible.length, activePosition + FEED_PRELOAD + 1)
+    )
+  );
+  for (const index of nearby) {
+    ensureFeedPlayer(index);
   }
   // destroy far
   for (const idx of [...state.feed.players.keys()]) {
-    if (Math.abs(idx - activeIndex) > FEED_PRELOAD) destroyFeedPlayer(idx);
+    if (!nearby.has(idx)) destroyFeedPlayer(idx);
   }
   // play active
   for (const [idx, player] of state.feed.players.entries()) {
@@ -2840,13 +3035,15 @@ function syncFeedPlayback(activeIndex) {
   }
 
   // append more when near end
-  if (activeIndex >= state.feed.cursor - 3) {
+  if (activePosition >= eligible.length - 3) {
     appendFeedSlides();
   }
 
   const it = state.feed.items[activeIndex];
   if (it) {
-    statsText.textContent = `其他视频 · ${activeIndex + 1}/${state.feed.items.length.toLocaleString(
+    const allEligible = feedEligibleIndexes();
+    const ordinal = allEligible.indexOf(activeIndex) + 1;
+    statsText.textContent = `其他视频 · ${ordinal}/${allEligible.length.toLocaleString(
       "zh-CN"
     )} · ${mediaOrderLabel(state.mediaOrder.videos)} · pid ${it.pid} · 上滑切换`;
   }
@@ -2858,20 +3055,23 @@ function appendFeedSlides() {
   if (state.feed.cursor >= items.length) return;
   const scroller = state.feed.scroller;
   if (!scroller) return;
-  const end = Math.min(items.length, state.feed.cursor + FEED_BATCH);
   const frag = document.createDocumentFragment();
   const wrap = document.createElement("div");
-  for (let i = state.feed.cursor; i < end; i++) {
-    wrap.innerHTML = feedSlideHtml(items[i], i);
-    frag.appendChild(wrap.firstElementChild);
+  const appendedIndexes = [];
+  while (state.feed.cursor < items.length && appendedIndexes.length === 0) {
+    const end = Math.min(items.length, state.feed.cursor + FEED_BATCH);
+    for (let i = state.feed.cursor; i < end; i++) {
+      if (!isFeedVideoEligible(items[i], state.feed.unavailablePaths)) continue;
+      wrap.innerHTML = feedSlideHtml(items[i], i);
+      frag.appendChild(wrap.firstElementChild);
+      appendedIndexes.push(i);
+    }
+    state.feed.cursor = end;
   }
   scroller.appendChild(frag);
   bindImgFallback(scroller);
   // bind interactions on new slides
-  for (let i = state.feed.cursor; i < end; i++) {
-    bindFeedSlide(i);
-  }
-  state.feed.cursor = end;
+  for (const index of appendedIndexes) bindFeedSlide(index);
 }
 
 function bindFeedSlide(index) {
@@ -3042,8 +3242,8 @@ function bindFeedSlide(index) {
   slide.querySelector('[data-act="next"]')?.addEventListener("click", (e) => {
     e.stopPropagation();
     showFeedControls();
-    const next = state.feed.scroller?.querySelector(`[data-feed-idx="${index + 1}"]`);
-    next?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+    const nextIndex = feedAdjacentIndex(index, 1);
+    scrollFeedToIndex(nextIndex, prefersReducedMotion() ? "auto" : "smooth");
   });
 }
 
@@ -3117,9 +3317,11 @@ function renderOtherVideosFeed(route, token) {
       const scroller = state.feed.scroller;
       if (!scroller) return;
       const h = scroller.clientHeight || window.innerHeight;
-      const idx = Math.round(scroller.scrollTop / h);
-      const clamped = Math.max(0, Math.min(state.feed.cursor - 1, idx));
-      if (clamped !== state.feed.active) syncFeedPlayback(clamped);
+      const slides = [...scroller.querySelectorAll(".feed-slide:not([hidden])")];
+      if (!slides.length) return;
+      const position = Math.max(0, Math.min(slides.length - 1, Math.round(scroller.scrollTop / h)));
+      const index = Number(slides[position].dataset.feedIdx);
+      if (Number.isInteger(index) && index !== state.feed.active) syncFeedPlayback(index);
     });
   };
   state.feed.onScroll = onScroll;
@@ -3136,14 +3338,16 @@ function renderOtherVideosFeed(route, token) {
     if (tag === "INPUT" || tag === "TEXTAREA") return;
     if (e.key === "ArrowDown" || e.key === "j") {
       e.preventDefault();
-      const next = state.feed.scroller?.querySelector(`[data-feed-idx="${state.feed.active + 1}"]`);
-      next?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+      scrollFeedToIndex(
+        feedAdjacentIndex(state.feed.active, 1),
+        prefersReducedMotion() ? "auto" : "smooth"
+      );
     } else if (e.key === "ArrowUp" || e.key === "k") {
       e.preventDefault();
-      const prev = state.feed.scroller?.querySelector(
-        `[data-feed-idx="${Math.max(0, state.feed.active - 1)}"]`
+      scrollFeedToIndex(
+        feedAdjacentIndex(state.feed.active, -1),
+        prefersReducedMotion() ? "auto" : "smooth"
       );
-      prev?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
     } else if (e.key === " " || e.key === "Spacebar") {
       if (e.target?.closest?.(".feed-slide")) return;
       e.preventDefault();
@@ -3157,7 +3361,13 @@ function renderOtherVideosFeed(route, token) {
   // kick first
   requestAnimationFrame(() => {
     if (token !== state.routeToken) return;
-    syncFeedPlayback(0);
+    const firstIndex = findEligibleFeedIndex(
+      state.feed.items,
+      state.feed.unavailablePaths,
+      0,
+      1
+    );
+    if (firstIndex >= 0) syncFeedPlayback(firstIndex);
   });
 }
 
