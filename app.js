@@ -4,8 +4,16 @@
  */
 
 import {
+  FEED_LONG_PRESS_MS,
+  FEED_LONG_PRESS_MOVE_PX,
+  FEED_LONG_PRESS_RATE,
+  bindFeedProgressControl,
+  createFeedLongPressController,
+  feedProgressPercent,
   listFeedPlayerIndexes,
   readFeedSoundEnabled,
+  resolveFeedDuration,
+  shouldStartFeedLongPress,
   writeFeedSoundEnabled,
 } from "./feed-policy.js";
 import { resolveWaterfallWidth } from "./layout-policy.js";
@@ -402,6 +410,7 @@ const state = {
     onScroll: null,
     onPointerActivity: null,
     controlsTimer: 0,
+    holdControllers: new Map(),
     soundEnabled: readFeedSoundEnabled(),
     soundUnlocked: false,
   },
@@ -411,6 +420,7 @@ const WATERFALL_BATCH = 36;
 const FEED_BATCH = 8;
 const FEED_PRELOAD = 1; // active ±1
 const FEED_CONTROLS_HIDE_MS = 3200;
+const FEED_PROGRESS_MAX = 1000;
 
 /** Category heat rank — source-site editorial / 点击榜 proxies (no raw click field in export) */
 const CAT_HEAT = {
@@ -1468,6 +1478,11 @@ function teardownSpecialModes() {
   state.waterfall.loading = false;
   state.waterfall._leftover = [];
 
+  for (const interaction of state.feed.holdControllers.values()) {
+    interaction.destroy();
+  }
+  state.feed.holdControllers.clear();
+
   // video feed players
   destroyAllFeedPlayers();
   if (state.feed.scroller && state.feed.onScroll) {
@@ -1502,9 +1517,11 @@ function destroyAllFeedPlayers() {
 }
 
 function destroyFeedPlayer(index) {
+  state.feed.holdControllers.get(index)?.cancel();
   const p = state.feed.players.get(index);
   if (!p) return;
   try {
+    p.video.playbackRate = 1;
     p.video?.pause();
   } catch {}
   if (p.hlsWrap) {
@@ -1527,7 +1544,11 @@ function destroyFeedPlayer(index) {
   if (slide) {
     const stage = slide.querySelector(".feed-stage");
     if (stage) stage.innerHTML = "";
-    slide.classList.remove("is-playing", "is-loading", "needs-tap");
+    slide.classList.remove("is-playing", "is-loading", "needs-tap", "is-speeding");
+    const playbackToggle = slide.querySelector(".feed-playback-toggle");
+    if (playbackToggle) playbackToggle.setAttribute("aria-pressed", "false");
+    const speed = slide.querySelector(".feed-speed");
+    if (speed) speed.hidden = true;
   }
 }
 
@@ -2522,6 +2543,53 @@ function setFeedSoundEnabled(enabled, { unlock = enabled, persist = true } = {})
   updateFeedSoundControls();
 }
 
+function isFeedInteractiveTarget(target) {
+  return Boolean(target?.closest?.(".feed-actions a, .feed-actions button, .feed-progress"));
+}
+
+function feedPlayerDuration(player, index) {
+  return resolveFeedDuration(player?.video?.duration, state.feed.items[index]?.duration);
+}
+
+function updateFeedProgress(index, currentOverride) {
+  const player = state.feed.players.get(index);
+  const slide = state.feed.scroller?.querySelector(`[data-feed-idx="${index}"]`);
+  const progress = slide?.querySelector(".feed-progress-range");
+  const output = slide?.querySelector(".feed-progress-time");
+  if (!player || !progress || !output) return;
+
+  const duration = feedPlayerDuration(player, index);
+  const rawCurrent = currentOverride ?? player.video.currentTime;
+  const numericCurrent = Number(rawCurrent);
+  const current = Number.isFinite(numericCurrent)
+    ? Math.min(duration || numericCurrent, Math.max(0, numericCurrent))
+    : 0;
+  const percent = feedProgressPercent(current, duration);
+  if (!progress.dataset.seeking) {
+    progress.value = String(Math.round((percent / 100) * FEED_PROGRESS_MAX));
+  }
+  progress.disabled = duration <= 0;
+  progress.style.setProperty("--feed-progress", `${percent}%`);
+  const timeText = `${fmtDur(Math.floor(current))} / ${fmtDur(Math.floor(duration))}`;
+  progress.setAttribute("aria-valuetext", timeText);
+  output.textContent = timeText;
+}
+
+function setFeedPlaybackRate(index, accelerated) {
+  const player = state.feed.players.get(index);
+  const slide = state.feed.scroller?.querySelector(`[data-feed-idx="${index}"]`);
+  if (!player || !slide) return false;
+  const video = player.video;
+  video.defaultPlaybackRate = 1;
+  if (accelerated) video.playbackRate = FEED_LONG_PRESS_RATE;
+  else video.playbackRate = 1;
+  player.longPressActive = accelerated;
+  slide.classList.toggle("is-speeding", accelerated);
+  const speed = slide.querySelector(".feed-speed");
+  if (speed) speed.hidden = !accelerated;
+  return true;
+}
+
 function showFeedControls(timeoutMs = FEED_CONTROLS_HIDE_MS) {
   if (!state.feed.root) return;
   state.feed.root.classList.remove("controls-hidden");
@@ -2552,6 +2620,7 @@ function markFeedPlaying(index) {
   if (hint) hint.hidden = true;
   const poster = slide.querySelector(".feed-poster");
   if (poster) poster.style.opacity = "0";
+  slide.querySelector(".feed-playback-toggle")?.setAttribute("aria-pressed", "true");
 }
 
 function showFeedHint(index, text) {
@@ -2563,6 +2632,7 @@ function showFeedHint(index, text) {
     hint.hidden = false;
     hint.textContent = text;
   }
+  slide.querySelector(".feed-playback-toggle")?.setAttribute("aria-pressed", "false");
 }
 
 async function playFeedPlayer(index) {
@@ -2604,9 +2674,10 @@ function feedSlideHtml(it, index) {
   const cands = thumbCandidates(it.cover, it.cover);
   const poster = cands[0] || "";
   const soundControl = feedSoundControlState();
+  const initialDuration = resolveFeedDuration(it.duration);
   return `
-    <section class="feed-slide" data-feed-idx="${index}" data-pid="${it.pid}" tabindex="0" role="button" aria-label="${escapeHtml(
-      `视频 ${index + 1}：${title}，点击播放或暂停`
+    <section class="feed-slide" data-feed-idx="${index}" data-pid="${it.pid}" role="group" aria-label="${escapeHtml(
+      `视频 ${index + 1}：${title}`
     )}">
       <div class="feed-stage">
         ${
@@ -2618,6 +2689,9 @@ function feedSlideHtml(it, index) {
         }
       </div>
       <div class="feed-shade"></div>
+      <button type="button" class="feed-playback-toggle" aria-label="${escapeHtml(
+        `播放或暂停视频：${title}`
+      )}" aria-pressed="false"></button>
       <div class="feed-meta">
         <div class="feed-pid">PID ${it.pid}</div>
         <div class="feed-title">${escapeHtml(title)}</div>
@@ -2641,6 +2715,11 @@ function feedSlideHtml(it, index) {
           <span class="feed-action-lab">下一条</span>
         </button>
       </aside>
+      <div class="feed-speed" hidden aria-live="polite">3×</div>
+      <div class="feed-progress">
+        <input class="feed-progress-range" type="range" min="0" max="${FEED_PROGRESS_MAX}" step="1" value="0" aria-label="视频播放进度" style="--feed-progress:0%" ${initialDuration ? "" : "disabled"} />
+        <output class="feed-progress-time">0:00 / ${fmtDur(Math.floor(initialDuration))}</output>
+      </div>
       <div class="feed-hint" hidden>点击播放</div>
       <div class="feed-loader" hidden>
         <span class="detail-loading-dot"></span>
@@ -2681,6 +2760,7 @@ function ensureFeedPlayer(index) {
     if (player) player.ready = true;
     slide.classList.remove("is-loading");
     if (loader) loader.hidden = true;
+    updateFeedProgress(index);
     if (state.feed.active === index && player?.playRequested) {
       void playFeedPlayer(index);
     }
@@ -2708,8 +2788,28 @@ function ensureFeedPlayer(index) {
     slide.classList.add("needs-tap");
   }
 
-  player = { video, hls, hlsWrap, index, ready: video.readyState >= 2, playRequested: false };
+  player = {
+    video,
+    hls,
+    hlsWrap,
+    index,
+    ready: video.readyState >= 2,
+    playRequested: false,
+    longPressActive: false,
+  };
   state.feed.players.set(index, player);
+  const syncProgress = () => updateFeedProgress(index);
+  video.addEventListener("loadedmetadata", syncProgress);
+  video.addEventListener("durationchange", syncProgress);
+  video.addEventListener("timeupdate", syncProgress);
+  video.addEventListener("seeked", syncProgress);
+  video.addEventListener("play", () => {
+    slide.querySelector(".feed-playback-toggle")?.setAttribute("aria-pressed", "true");
+  });
+  video.addEventListener("pause", () => {
+    slide.querySelector(".feed-playback-toggle")?.setAttribute("aria-pressed", "false");
+  });
+  updateFeedProgress(index);
   return player;
 }
 
@@ -2730,6 +2830,7 @@ function syncFeedPlayback(activeIndex) {
       player.playRequested = true;
       void playFeedPlayer(idx);
     } else {
+      setFeedPlaybackRate(idx, false);
       player.playRequested = false;
       try {
         player.video.pause();
@@ -2778,8 +2879,131 @@ function bindFeedSlide(index) {
   if (!slide || slide.dataset.bound) return;
   slide.dataset.bound = "1";
 
+  const feedToken = state.routeToken;
+  const feedScroller = state.feed.scroller;
+  let suppressTimer = 0;
+  let suppressClick = false;
+
+  const suppressNextClick = () => {
+    suppressClick = true;
+    if (suppressTimer) window.clearTimeout(suppressTimer);
+    suppressTimer = window.setTimeout(() => {
+      suppressClick = false;
+      suppressTimer = 0;
+    }, 250);
+  };
+
+  const handleHoldFinish = (event, result) => {
+    if (result.wasActive) {
+      if (event?.cancelable) event.preventDefault();
+      if (result.suppressClick) suppressNextClick();
+    }
+  };
+
+  const hold = createFeedLongPressController({
+    delayMs: FEED_LONG_PRESS_MS,
+    movementPx: FEED_LONG_PRESS_MOVE_PX,
+    onActivate(pointerId) {
+      const stillCurrent =
+        state.routeToken === feedToken &&
+        state.feed.scroller === feedScroller &&
+        slide.isConnected &&
+        feedScroller?.contains(slide);
+      if (!stillCurrent) return false;
+      if (state.feed.active !== index) syncFeedPlayback(index);
+      const player = state.feed.players.get(index) || ensureFeedPlayer(index);
+      if (!player || !setFeedPlaybackRate(index, true)) return false;
+      try {
+        slide.setPointerCapture(pointerId);
+      } catch {}
+      showFeedControls(0);
+      void playFeedPlayer(index);
+      return true;
+    },
+    onDeactivate(pointerId) {
+      setFeedPlaybackRate(index, false);
+      showFeedControls();
+      if (slide.hasPointerCapture?.(pointerId)) {
+        try {
+          slide.releasePointerCapture(pointerId);
+        } catch {}
+      }
+    },
+  });
+
+  const interaction = {
+    cancel: () => hold.cancel(),
+    destroy() {
+      hold.destroy();
+      if (suppressTimer) window.clearTimeout(suppressTimer);
+      suppressTimer = 0;
+      suppressClick = false;
+    },
+  };
+  state.feed.holdControllers.set(index, interaction);
+
+  slide.addEventListener("pointerdown", (event) => {
+    if (
+      !shouldStartFeedLongPress({
+        isPrimary: event.isPrimary,
+        pointerType: event.pointerType,
+        button: event.button,
+        interactive: isFeedInteractiveTarget(event.target),
+      })
+    ) {
+      return;
+    }
+    hold.pointerDown(event);
+  });
+
+  slide.addEventListener("pointermove", (event) => {
+    handleHoldFinish(event, hold.pointerMove(event));
+  });
+
+  slide.addEventListener("pointerup", (event) => {
+    handleHoldFinish(event, hold.pointerUp(event));
+  });
+
+  slide.addEventListener("pointercancel", (event) => {
+    handleHoldFinish(event, hold.pointerCancel(event));
+  });
+
+  slide.addEventListener("pointerleave", (event) => {
+    if (event.pointerType === "mouse") handleHoldFinish(event, hold.pointerUp(event));
+  });
+
+  slide.addEventListener("contextmenu", (event) => {
+    if (isFeedInteractiveTarget(event.target)) return;
+    event.preventDefault();
+  });
+
+  const progress = slide.querySelector(".feed-progress-range");
+  if (progress) {
+    bindFeedProgressControl(progress, {
+      getDuration() {
+        const player = state.feed.players.get(index) || ensureFeedPlayer(index);
+        return player ? feedPlayerDuration(player, index) : null;
+      },
+      seekTo(target) {
+        const player = state.feed.players.get(index);
+        if (!player) return;
+        try {
+          player.video.currentTime = target;
+        } catch {}
+      },
+      update: (target) => updateFeedProgress(index, target),
+      showControls: (timeoutMs) => showFeedControls(timeoutMs),
+    });
+  }
+
   slide.addEventListener("click", (e) => {
-    if (e.target.closest(".feed-actions a, .feed-actions button")) return;
+    if (suppressClick) {
+      suppressClick = false;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (isFeedInteractiveTarget(e.target)) return;
     showFeedControls();
     if (state.feed.active !== index) syncFeedPlayback(index);
     const player = state.feed.players.get(index) || ensureFeedPlayer(index);
@@ -2795,19 +3019,13 @@ function bindFeedSlide(index) {
       player.playRequested = false;
       player.video.pause();
       slide.classList.remove("is-playing");
+      slide.querySelector(".feed-playback-toggle")?.setAttribute("aria-pressed", "false");
       const hint = slide.querySelector(".feed-hint");
       if (hint) {
         hint.hidden = false;
         hint.textContent = "已暂停";
       }
     }
-  });
-
-  slide.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    if (e.target.closest(".feed-actions a, .feed-actions button")) return;
-    e.preventDefault();
-    slide.click();
   });
 
   slide.querySelector('[data-act="mute"]')?.addEventListener("click", (e) => {

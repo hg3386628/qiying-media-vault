@@ -22,6 +22,21 @@ test("video feed removes only the top tip and keeps side controls", () => {
   assert.equal(appSource.includes('data-act="next"'), true);
 });
 
+test("video feed exposes mobile long-press speed and a draggable bottom progress bar", () => {
+  assert.equal(appSource.includes('class="feed-speed"'), true);
+  assert.equal(appSource.includes('class="feed-progress-range"'), true);
+  assert.equal(appSource.includes('video.playbackRate = FEED_LONG_PRESS_RATE'), true);
+  assert.equal(appSource.includes("createFeedLongPressController({"), true);
+  assert.equal(appSource.includes("bindFeedProgressControl(progress"), true);
+  assert.equal(appSource.includes('slide.addEventListener("pointercancel"'), true);
+  assert.equal(appSource.includes("interaction.destroy();"), true);
+  assert.equal(appSource.includes('class="feed-playback-toggle"'), true);
+  assert.equal(appSource.includes('aria-pressed="false"'), true);
+  assert.equal(styleSource.includes(".feed-progress"), true);
+  assert.equal(styleSource.includes("touch-action: none"), true);
+  assert.equal(styleSource.includes(".feed-playback-toggle:focus-visible"), true);
+});
+
 test("image lightbox supports horizontal touch swipes without hijacking vertical gestures", () => {
   assert.equal(appSource.includes("LIGHTBOX_SWIPE_MIN = 48"), true);
   assert.equal(appSource.includes('event.pointerType !== "touch"'), true);
