@@ -173,6 +173,18 @@ def video_feed_record(post: dict[str, Any], media: dict[str, Any]) -> dict[str, 
     return record
 
 
+def is_video_feed_candidate(media: dict[str, Any]) -> bool:
+    path = str(media.get("path") or "").lower().split("?", 1)[0].split("#", 1)[0]
+    if not path:
+        return False
+    status = "" if media.get("status") is None else str(media.get("status"))
+    if status and status != "1":
+        return False
+    if path.endswith((".mp4", ".webm", ".mov")) and status != "1":
+        return False
+    return True
+
+
 def relative_entry(root: Path, entry: dict[str, int | str]) -> dict[str, int | str]:
     result = dict(entry)
     result["file"] = Path(str(entry["file"])).relative_to(root).as_posix()
@@ -221,6 +233,7 @@ def build_data(posts: list[dict[str, Any]], output: Path) -> dict[str, Any]:
         video_feed_record(post, media)
         for post in video_posts
         for media in (post.get("videos") or [])
+        if is_video_feed_candidate(media)
     ]
 
     image_files = write_shards(
@@ -239,7 +252,7 @@ def build_data(posts: list[dict[str, Any]], output: Path) -> dict[str, Any]:
             "titled_posts": sum(1 for post in posts if has_real_title(post)),
             "untitled_posts": len(untitled),
             "other_images": len(image_posts),
-            "other_videos": len(video_posts),
+            "other_videos": len({int(item["p"]) for item in video_items}),
             "images": sum(int(post.get("image_count") or 0) for post in posts),
             "videos": sum(int(post.get("video_count") or 0) for post in posts),
         },

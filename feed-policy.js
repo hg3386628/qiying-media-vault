@@ -26,6 +26,56 @@ export function feedSeekTime(value, max, duration) {
   return Math.min(total, Math.max(0, (position / range) * total));
 }
 
+const TERMINAL_FEED_HTTP_STATUS = new Set([404, 410, 415, 422, 451, 567]);
+const TERMINAL_FEED_ERROR_DETAILS = new Set([
+  "empty-path",
+  "manifestParsingError",
+  "manifestIncompatibleCodecsError",
+  "levelEmptyError",
+  "levelParsingError",
+  "fragParsingError",
+  "bufferIncompatibleCodecsError",
+]);
+
+export function isTerminalFeedVideoError(error) {
+  if (error?.sourceFatal === true) return true;
+  const status = Number(error?.response?.code ?? error?.responseCode ?? error?.status);
+  if (TERMINAL_FEED_HTTP_STATUS.has(status)) return true;
+  const mediaCode = Number(error?.mediaCode);
+  if (mediaCode === 3 || mediaCode === 4) return true;
+  return TERMINAL_FEED_ERROR_DETAILS.has(String(error?.details || ""));
+}
+
+export function isFeedVideoEligible(item, unavailablePaths = new Set()) {
+  const path = String(item?.path || "");
+  if (!path || unavailablePaths?.has?.(path)) return false;
+  const status = item?.status == null ? "" : String(item.status);
+  if (status && status !== "1") return false;
+  return item?.kind !== "mp4" || status === "1";
+}
+
+export function listEligibleFeedIndexes(items, unavailablePaths = new Set(), limit = items.length) {
+  const end = Math.min(items.length, Math.max(0, Number(limit) || 0));
+  const indexes = [];
+  for (let index = 0; index < end; index += 1) {
+    if (isFeedVideoEligible(items[index], unavailablePaths)) indexes.push(index);
+  }
+  return indexes;
+}
+
+export function findEligibleFeedIndex(
+  items,
+  unavailablePaths = new Set(),
+  startIndex = 0,
+  direction = 1
+) {
+  const step = direction < 0 ? -1 : 1;
+  for (let index = Number(startIndex) || 0; index >= 0 && index < items.length; index += step) {
+    if (isFeedVideoEligible(items[index], unavailablePaths)) return index;
+  }
+  return -1;
+}
+
 export function shouldStartFeedLongPress({ isPrimary, pointerType, button, interactive }) {
   if (!isPrimary || interactive) return false;
   return pointerType !== "mouse" || button === 0;

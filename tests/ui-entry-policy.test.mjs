@@ -37,6 +37,20 @@ test("video feed exposes mobile long-press speed and a draggable bottom progress
   assert.equal(styleSource.includes(".feed-playback-toggle:focus-visible"), true);
 });
 
+test("video feed removes terminally failed sources from the swipe sequence", () => {
+  assert.equal(appSource.includes("markFeedUnavailable(index, data)"), true);
+  assert.equal(appSource.includes('slide.hidden = true'), true);
+  assert.equal(appSource.includes('.feed-slide:not([hidden])'), true);
+  assert.equal(appSource.includes("feedAdjacentIndex(state.feed.active, 1)"), true);
+  assert.equal(appSource.includes('behavior: behavior === "smooth" ? "smooth" : "instant"'), true);
+  assert.equal(appSource.includes('video.addEventListener("error", onNativeError'), true);
+  assert.equal(appSource.includes("isTerminalFeedVideoError(data)"), true);
+  assert.equal(appSource.includes("markFeedRetryable(index, data)"), true);
+  assert.equal(appSource.includes("showFeedEmptyState()"), true);
+  assert.equal(appSource.includes("暂无可播放视频"), true);
+  assert.equal(appSource.includes('hint.textContent = `${kind} · 上滑下一条`'), false);
+});
+
 test("image lightbox supports horizontal touch swipes without hijacking vertical gestures", () => {
   assert.equal(appSource.includes("LIGHTBOX_SWIPE_MIN = 48"), true);
   assert.equal(appSource.includes('event.pointerType !== "touch"'), true);

@@ -7,8 +7,12 @@ import {
   FEED_LONG_PRESS_RATE,
   bindFeedProgressControl,
   createFeedLongPressController,
+  findEligibleFeedIndex,
   feedProgressPercent,
   feedSeekTime,
+  isFeedVideoEligible,
+  isTerminalFeedVideoError,
+  listEligibleFeedIndexes,
   listFeedPlayerIndexes,
   readFeedSoundEnabled,
   resolveFeedDuration,
@@ -115,6 +119,47 @@ test("feed progress math clamps seek targets and invalid media values", () => {
   assert.equal(feedSeekTime(500, 0, 120), 0);
   assert.equal(feedSeekTime(Number.NaN, 1000, 120), 0);
   assert.equal(feedSeekTime(500, Number.POSITIVE_INFINITY, 120), 0);
+});
+
+test("video feed candidates exclude known failures and preserve visible navigation order", () => {
+  const items = [
+    { path: "/0.m3u8", kind: "hls", status: "1" },
+    { path: "/1.mp4", kind: "mp4", status: "0" },
+    { path: "/2.m3u8", kind: "hls", status: "1" },
+    { path: "/3.mp4", kind: "mp4", status: 1 },
+    { path: "/4.bin", kind: "video", status: "2" },
+    { path: "/5.bin", kind: "video", status: "" },
+    { path: "", kind: "hls", status: "1" },
+  ];
+  const unavailable = new Set(["/2.m3u8"]);
+
+  assert.equal(isFeedVideoEligible(items[0], unavailable), true);
+  assert.equal(isFeedVideoEligible(items[1], unavailable), false);
+  assert.equal(isFeedVideoEligible(items[2], unavailable), false);
+  assert.equal(isFeedVideoEligible(items[3], unavailable), true);
+  assert.equal(isFeedVideoEligible(items[4], unavailable), false);
+  assert.equal(isFeedVideoEligible(items[5], unavailable), true);
+  assert.equal(isFeedVideoEligible(items[6], unavailable), false);
+  assert.deepEqual(listEligibleFeedIndexes(items, unavailable), [0, 3, 5]);
+  assert.deepEqual(listEligibleFeedIndexes(items, unavailable, 4), [0, 3]);
+  assert.equal(findEligibleFeedIndex(items, unavailable, 1, 1), 3);
+  assert.equal(findEligibleFeedIndex(items, unavailable, 4, -1), 3);
+  assert.equal(findEligibleFeedIndex(items, unavailable, 6, 1), -1);
+});
+
+test("terminal source errors stay distinct from retryable network and platform failures", () => {
+  assert.equal(isTerminalFeedVideoError({ response: { code: 404 } }), true);
+  assert.equal(isTerminalFeedVideoError({ responseCode: "567" }), true);
+  assert.equal(isTerminalFeedVideoError({ mediaCode: 3 }), true);
+  assert.equal(isTerminalFeedVideoError({ mediaCode: 4 }), true);
+  assert.equal(isTerminalFeedVideoError({ details: "manifestParsingError" }), true);
+  assert.equal(isTerminalFeedVideoError({ sourceFatal: true }), true);
+
+  assert.equal(isTerminalFeedVideoError({ response: { code: 500 } }), false);
+  assert.equal(isTerminalFeedVideoError({ response: { code: 502 } }), false);
+  assert.equal(isTerminalFeedVideoError({ mediaCode: 2 }), false);
+  assert.equal(isTerminalFeedVideoError({ details: "manifestLoadTimeout" }), false);
+  assert.equal(isTerminalFeedVideoError({ details: "no-hls-support" }), false);
 });
 
 test("mobile long press activates once, restores on release, and requests click suppression", () => {
